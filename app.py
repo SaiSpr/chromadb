@@ -63,15 +63,23 @@ def parse_filter_criteria(filter_value):
     return None, None  # Return None if no valid filter is found
 
 
+def normalize_text(value):
+    """Cleans and converts text to lowercase for uniform matching."""
+    if isinstance(value, str):
+        return value.strip().lower()
+    return value
+
 def build_metadata_filter(parsed_input):
     """
-    Constructs a ChromaDB-compatible metadata filter using `$and` for multiple conditions.
+    Constructs a ChromaDB-compatible metadata filter using `$and` for multiple conditions,
+    with **fuzzy** matching for text fields.
     """
     filters = []
 
-    # Country Filter (Exact Match)
+    # Country Filter (Fuzzy Match using Regex)
     if parsed_input.get("country"):
-        filters.append({"country": {"$eq": parsed_input["country"]}})
+        country_filter = normalize_text(parsed_input["country"])
+        filters.append({"country": {"$regex": f".*{re.escape(country_filter)}.*"}})
 
     # Study Size Filter (Handles >, >=, <, <=, !=, =)
     if parsed_input.get("study_size"):
@@ -87,11 +95,13 @@ def build_metadata_filter(parsed_input):
 
     # Gender Filter (Matches "All" or the specified gender)
     if parsed_input.get("gender"):
-        filters.append({"sex": {"$in": ["ALL", parsed_input["gender"].upper()]}})
+        gender_filter = normalize_text(parsed_input["gender"])
+        filters.append({"sex": {"$in": ["ALL", gender_filter.upper()]}})
 
-    # Status Filter (Exact Match)
+    # Status Filter (Fuzzy Match using Regex)
     if parsed_input.get("status"):
-        filters.append({"overallStatus": {"$eq": parsed_input["status"].upper()}})
+        status_filter = normalize_text(parsed_input["status"])
+        filters.append({"overallStatus": {"$regex": f".*{re.escape(status_filter)}.*"}})
 
     # Combining Filters
     if len(filters) == 1:
