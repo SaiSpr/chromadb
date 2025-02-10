@@ -6,3 +6,4 @@ sentence-transformers
 pandas
 numpy
 pysqlite3-binary
+plotly
