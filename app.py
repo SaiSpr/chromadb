@@ -7,7 +7,6 @@ import streamlit as st
 import pandas as pd
 import chromadb
 import torch
-import plotly.graph_objects as go
 from sentence_transformers import SentenceTransformer
 from gradio_client import Client
 
@@ -50,7 +49,7 @@ def flatten_list(nested_list):
 
 def query_chromadb(parsed_input):
     """Search ChromaDB based on extracted biomarker JSON criteria."""
-
+    
     query_text = f"""
     Biomarkers: {', '.join(flatten_list(parsed_input.get('inclusion_biomarker', [])))}
     Exclusions: {', '.join(flatten_list(parsed_input.get('exclusion_biomarker', [])))}
@@ -75,6 +74,33 @@ def query_chromadb(parsed_input):
         return df
     else:
         return pd.DataFrame(columns=["nctId", "condition", "eligibility", "briefSummary", "overallStatus", "age", "count", "sex", "country", "startDate"])
+
+# -------------------------------
+# ✅ Convert Data to Static Table Format
+# -------------------------------
+def format_results_as_table(df, extracted_biomarkers):
+    """Format clinical trial results into a structured DataFrame for display."""
+    
+    table_data = []
+    
+    for _, row in df.iterrows():
+        table_data.append([
+            f"[{row['nctId']}](https://clinicaltrials.gov/study/{row['nctId']})",  # Hyperlinked ID
+            ", ".join(flatten_list(extracted_biomarkers.get("inclusion_biomarker", []))),  # Biomarker Match
+            row["condition"],
+            row["overallStatus"],
+            row["count"],
+            row["sex"],
+            row["startDate"],
+            row["country"]
+        ])
+
+    table_df = pd.DataFrame(
+        table_data,
+        columns=["Trial ID", "Biomarker", "Condition", "Status", "Study Size", "Gender", "Start Date", "Country"]
+    )
+    
+    return table_df
 
 # -------------------------------
 # ✅ Streamlit UI
@@ -104,55 +130,14 @@ if st.button("🔍 Extract Biomarkers & Find Trials"):
             trial_results = query_chromadb(response)
             
             if not trial_results.empty:
-                # Create Hyperlink for Trial ID
-                trial_results["Trial ID"] = trial_results["nctId"].apply(
-                    lambda x: f"[{x}](https://clinicaltrials.gov/study/{x})"
-                )
-
-                # Reorder Columns for Better Display
-                display_df = trial_results[[
-                    "Trial ID", "condition", "overallStatus", "count", "sex", "startDate", "country"
-                ]].rename(columns={
-                    "Trial ID": "Trials ID",
-                    "condition": "Condition",
-                    "overallStatus": "Status",
-                    "count": "Study Size",
-                    "sex": "Gender",
-                    "startDate": "Start Date",
-                    "country": "Country"
-                })
-
-                # ---- 📌 Plotly Table ----
-                fig = go.Figure(
-                    data=[
-                        go.Table(
-                            header=dict(
-                                values=list(display_df.columns),
-                                fill_color="lightgrey",
-                                align="center",
-                                font=dict(size=14, color="black")
-                            ),
-                            cells=dict(
-                                values=[display_df[col] for col in display_df.columns],
-                                fill_color="white",
-                                align="left",
-                                font=dict(size=12, color="black")
-                            )
-                        )
-                    ]
-                )
-
-                st.plotly_chart(fig, use_container_width=True)
-
+                formatted_results = format_results_as_table(trial_results, response)
+                st.table(formatted_results)  # Display as static table
             else:
                 st.warning("⚠️ No matching trials found!")
         else:
             st.error("❌ Error in fetching response. Please try again.")
     else:
         st.warning("⚠️ Please enter some clinical text before extracting biomarkers!")
-
-
-
 
 
 
