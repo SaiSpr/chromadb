@@ -221,16 +221,18 @@ def format_results_as_table(df, extracted_biomarkers):
 # -------------------------------
 # ✅ Streamlit UI
 # -------------------------------
-st.set_page_config(page_title="🧬 Biomarker-Based Clinical Trial Finder", page_icon="🧬", layout="wide")
+st.set_page_config(page_title="🧬Galileo", page_icon="🧬", layout="wide")
 
 st.markdown("""
-    <h1 style='text-align: center; color: #4CAF50;'>🧬 Biomarker-Based Clinical Trial Finder 🏥</h1>
+    <h1 style='text-align: center; color: #4CAF50;'>🧬 Biomarker-Based Clinical Trial Matching! 🏥</h1>
     <p style='text-align: center; font-size: 18px;'>Enter clinical text, extract biomarkers, and find matching trials!</p>
     <hr>
     """, unsafe_allow_html=True)
 
+st.markdown("### 🩸 Enter Biomarker Criteria:")
+
 # User Input
-user_input = st.text_area("Enter clinical trial eligibility criteria:", placeholder="e.g., BRAF mutation, age > 50, gender=male, country=China, status=recruiting")
+user_input = st.text_area("Provide key biomarkers and eligibility criteria to find relevant trials below 👇:", placeholder="e.g., Identify lung carer trials for patients with an ALK fusion OR ROS1 rearrangement, age: > 50, gender:male, country:us, study_size:>=50, status=recruiting")
 
 if st.button("🔍 Extract Biomarkers & Find Trials"):
     if user_input.strip():
