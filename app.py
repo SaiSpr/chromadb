@@ -9,6 +9,7 @@ import chromadb
 import torch
 from sentence_transformers import SentenceTransformer
 from gradio_client import Client
+import re
 
 # -------------------------------
 # ✅ Initialize Hugging Face Client
@@ -40,6 +41,59 @@ device = "cuda" if torch.cuda.is_available() else "cpu"
 embedding_model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
 
 # -------------------------------
+# ✅ Helper Functions for Filtering
+# -------------------------------
+
+def parse_filter_criteria(value):
+    """
+    Parses filtering criteria like >50, <=60, etc., and returns the operator & number.
+    Example:
+    - ">50"  →  ("$gt", 50)
+    - "<=60" →  ("$lte", 60)
+    """
+    match = re.match(r"(>=|<=|>|<|!=|=)?(\d+)", str(value).strip())
+    if match:
+        operator, num = match.groups()
+        num = int(num)
+        return {
+            ">": "$gt",
+            ">=": "$gte",
+            "<": "$lt",
+            "<=": "$lte",
+            "=": "$eq",
+            "!=": "$ne"
+        }.get(operator, "$eq"), num
+    return None, None
+
+def build_metadata_filter(parsed_input):
+    """
+    Constructs a ChromaDB-compatible metadata filter dynamically.
+    """
+    filters = {}
+
+    # Country Filter
+    if parsed_input.get("country"):
+        filters["country"] = {"$eq": parsed_input["country"]}
+
+    # Study Size Filter
+    if parsed_input.get("study_size"):
+        operator, value = parse_filter_criteria(parsed_input["study_size"])
+        if operator:
+            filters["count"] = {operator: value}
+
+    # Age Filter
+    if parsed_input.get("ages"):
+        operator, value = parse_filter_criteria(parsed_input["ages"])
+        if operator:
+            filters["age"] = {operator: value}
+
+    # Gender Filter (Match 'All' or the specified gender)
+    if parsed_input.get("gender"):
+        filters["sex"] = {"$in": ["ALL", parsed_input["gender"].upper()]}
+
+    return filters if filters else None  # Return None if no filters exist
+
+# -------------------------------
 # ✅ Query ChromaDB Based on Extracted JSON
 # -------------------------------
 
@@ -48,8 +102,10 @@ def flatten_list(nested_list):
     return [item for sublist in nested_list for item in (sublist if isinstance(sublist, list) else [sublist])]
 
 def query_chromadb(parsed_input):
-    """Search ChromaDB based on extracted biomarker JSON criteria."""
-    
+    """Search ChromaDB using extracted biomarker JSON & strict metadata filters."""
+
+    metadata_filters = build_metadata_filter(parsed_input)
+
     query_text = f"""
     Biomarkers: {', '.join(flatten_list(parsed_input.get('inclusion_biomarker', [])))}
     Exclusions: {', '.join(flatten_list(parsed_input.get('exclusion_biomarker', [])))}
@@ -62,10 +118,11 @@ def query_chromadb(parsed_input):
 
     query_embedding = embedding_model.encode(query_text, convert_to_tensor=False)
 
-    # Query ChromaDB for similar records
+    # Query ChromaDB with metadata filtering
     results = collection.query(
         query_embeddings=[query_embedding.tolist()],
-        n_results=5  # Fetch top 5 matches
+        n_results=10,  # Fetch top 10 matches
+        where=metadata_filters  # Apply strict filters
     )
 
     # Convert results into a DataFrame
@@ -114,7 +171,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # User Input
-user_input = st.text_area("Enter clinical trial eligibility criteria:", placeholder="e.g., BRAF mutation, age > 50, gender=male, country=United States")
+user_input = st.text_area("Enter clinical trial eligibility criteria:", placeholder="e.g., BRAF mutation, age > 50, gender=male, country=China")
 
 if st.button("🔍 Extract Biomarkers & Find Trials"):
     if user_input.strip():
