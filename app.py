@@ -51,8 +51,6 @@ def parse_filter_criteria(filter_value):
       ">=50" → ("$gte", 50)
       "<60" → ("$lt", 60)
     """
-    import re
-
     match = re.match(r"([<>!=]=?|=)\s*(\d+)", str(filter_value))
     if match:
         operator_map = {
@@ -62,6 +60,37 @@ def parse_filter_criteria(filter_value):
         return operator_map.get(op), int(value)
     return None, None  # Return None if no valid filter is found
 
+# ---
+# New Helper Functions: Canonicalization for country and gender
+# ---
+
+def canonical_country(country):
+    """
+    Maps various country synonyms to a canonical country name.
+    For example, "us", "u.s", "usa", "u.s.a", and "america" will be converted to "United States".
+    """
+    if not country:
+        return country
+    c = country.lower().replace(".", "").replace(" ", "")
+    if c in ["us", "usa", "us", "usa", "unitedstates", "america"]:
+        return "United States"
+    # Add more mappings if needed
+    return country.title()  # Default to title-case
+
+def canonical_gender(gender):
+    """
+    Maps various gender synonyms to a canonical gender.
+    For example, if the input indicates female ("women", "w", "woman", "female", "f"), it returns "FEMALE".
+    Similarly, male inputs are normalized to "MALE".
+    """
+    if not gender:
+        return gender
+    g = gender.lower().strip()
+    if g in ["women", "w", "woman", "female", "f"]:
+        return "FEMALE"
+    elif g in ["men", "m", "man", "male"]:
+        return "MALE"
+    return gender.upper()
 
 def build_metadata_filter(parsed_input):
     """
@@ -69,9 +98,10 @@ def build_metadata_filter(parsed_input):
     """
     filters = []
 
-    # Country Filter (Exact Match)
+    # Country Filter (Exact Match using canonicalization)
     if parsed_input.get("country"):
-        filters.append({"country": {"$eq": parsed_input["country"]}})
+        country_val = canonical_country(parsed_input["country"])
+        filters.append({"country": {"$eq": country_val}})
 
     # Study Size Filter (Handles >, >=, <, <=, !=, =)
     if parsed_input.get("study_size"):
@@ -85,9 +115,10 @@ def build_metadata_filter(parsed_input):
         if operator:
             filters.append({"age": {operator: value}})
 
-    # Gender Filter (Matches "All" or the specified gender)
+    # Gender Filter (Matches "ALL" or the canonical gender)
     if parsed_input.get("gender"):
-        filters.append({"sex": {"$in": ["ALL", parsed_input["gender"].upper()]}})
+        gender_val = canonical_gender(parsed_input["gender"])
+        filters.append({"sex": {"$in": ["ALL", gender_val]}})
 
     # Status Filter (Exact Match)
     if parsed_input.get("status"):
@@ -100,8 +131,6 @@ def build_metadata_filter(parsed_input):
         return {"$and": filters}  # Apply multiple conditions
     else:
         return None  # No filters applied
-
-
 
 # -------------------------------
 # ✅ Query ChromaDB Based on Extracted JSON
@@ -205,6 +234,7 @@ if st.button("🔍 Extract Biomarkers & Find Trials"):
             st.error("❌ Error in fetching response. Please try again.")
     else:
         st.warning("⚠️ Please enter some clinical text before extracting biomarkers!")
+
 
 
 
