@@ -69,17 +69,42 @@ def normalize_text(value):
         return value.strip().lower()
     return value
 
+def parse_filter_criteria(criteria):
+    """Parses study_size or age filter values into operators and numbers."""
+    match = re.match(r"(>=|<=|>|<|!=|=)?\s*(\d+)", criteria)
+    if match:
+        operator_map = {
+            ">": "$gt",
+            ">=": "$gte",
+            "<": "$lt",
+            "<=": "$lte",
+            "!=": "$ne",
+            "=": "$eq"
+        }
+        return operator_map.get(match.group(1), "$eq"), int(match.group(2))
+    return None, None
+
 def build_metadata_filter(parsed_input):
     """
-    Constructs a ChromaDB-compatible metadata filter using `$and` for multiple conditions,
-    with **fuzzy** matching for text fields.
+    Constructs a ChromaDB-compatible metadata filter using `$and` for multiple conditions.
+    - Uses `$in` instead of `$regex`
+    - Uses strict comparison operators for numerical fields
+    - Supports flexible gender matching
     """
     filters = []
 
-    # Country Filter (Fuzzy Match using Regex)
+    # Country Filter (Strict Match, but supports different country names)
     if parsed_input.get("country"):
         country_filter = normalize_text(parsed_input["country"])
-        filters.append({"country": {"$regex": f".*{re.escape(country_filter)}.*"}})
+        country_variants = {
+            "usa": ["United States", "USA", "U.S.","U.S.A", "America"],
+            "china": ["China", "People's Republic of China", "PRC"],
+            "india": ["India", "Bharat"],
+            "uk": ["United Kingdom", "UK", "Britain", "England"],
+            "germany": ["Germany", "Deutschland"],
+            "france": ["France", "République Française"],
+        }
+        filters.append({"country": {"$in": country_variants.get(country_filter, [parsed_input["country"]])}})
 
     # Study Size Filter (Handles >, >=, <, <=, !=, =)
     if parsed_input.get("study_size"):
@@ -96,12 +121,24 @@ def build_metadata_filter(parsed_input):
     # Gender Filter (Matches "All" or the specified gender)
     if parsed_input.get("gender"):
         gender_filter = normalize_text(parsed_input["gender"])
-        filters.append({"sex": {"$in": ["ALL", gender_filter.upper()]}})
+        gender_variants = {
+            "female": ["ALL", "FEMALE", "WOMAN", "WOMEN", "F", "W"],
+            "male": ["ALL", "MALE", "MAN", "MEN", "M"],
+            "all": ["ALL", "BOTH", "ANY", "UNISEX"]
+        }
+        mapped_gender = "female" if gender_filter in gender_variants["female"] else \
+                        "male" if gender_filter in gender_variants["male"] else "all"
+        filters.append({"sex": {"$in": gender_variants[mapped_gender]}})
 
-    # Status Filter (Fuzzy Match using Regex)
+    # Status Filter (Match common variations)
     if parsed_input.get("status"):
         status_filter = normalize_text(parsed_input["status"])
-        filters.append({"overallStatus": {"$regex": f".*{re.escape(status_filter)}.*"}})
+        status_variants = {
+            "recruiting": ["Recruiting", "Active Recruiting", "Enrolling"],
+            "completed": ["Completed", "Finished", "Done"],
+            "terminated": ["Terminated", "Closed", "Withdrawn"]
+        }
+        filters.append({"overallStatus": {"$in": status_variants.get(status_filter, [parsed_input["status"]])}})
 
     # Combining Filters
     if len(filters) == 1:
@@ -110,7 +147,6 @@ def build_metadata_filter(parsed_input):
         return {"$and": filters}  # Apply multiple conditions
     else:
         return None  # No filters applied
-
 
 
 # -------------------------------
