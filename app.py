@@ -132,12 +132,20 @@ def apply_filters(df, parsed_input):
 # -------------------------------
 # ✅ Query ChromaDB Based on Extracted JSON
 # -------------------------------
+def flatten_list(nested_list):
+    """Flattens a list of lists into a single list of strings."""
+    return [item for sublist in nested_list for item in (sublist if isinstance(sublist, list) else [sublist])]
+
 def query_chromadb(parsed_input):
     """Search ChromaDB based on extracted biomarker JSON criteria."""
 
+    # Ensure biomarkers are properly formatted as a flat list
+    inclusion_biomarkers = flatten_list(parsed_input.get('inclusion_biomarker', []))
+    exclusion_biomarkers = flatten_list(parsed_input.get('exclusion_biomarker', []))
+
     query_text = f"""
-    Biomarkers: {', '.join(parsed_input.get('inclusion_biomarker', []))}
-    Exclusions: {', '.join(parsed_input.get('exclusion_biomarker', []))}
+    Biomarkers: {', '.join(inclusion_biomarkers)}
+    Exclusions: {', '.join(exclusion_biomarkers)}
     Status: {parsed_input.get('status', '')}
     Study Size: {parsed_input.get('study_size', '')}
     Ages: {parsed_input.get('ages', '')}
