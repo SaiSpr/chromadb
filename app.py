@@ -97,7 +97,7 @@ def build_metadata_filter(parsed_input):
     if parsed_input.get("country"):
         country_filter = normalize_text(parsed_input["country"])
         country_variants = {
-            "usa": ["United States", "USA", "U.S.","U.S.A", "America"],
+            "United States": ["United States", "USA", "U.S.","U.S.A", "America", "UNITED STATES"],
             "china": ["China", "People's Republic of China", "PRC"],
             "india": ["India", "Bharat"],
             "uk": ["United Kingdom", "UK", "Britain", "England"],
