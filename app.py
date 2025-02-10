@@ -9,7 +9,6 @@ import chromadb
 import torch
 from sentence_transformers import SentenceTransformer
 from gradio_client import Client
-from streamlit.components.v1 import html
 
 # -------------------------------
 # ✅ Initialize Hugging Face Client
@@ -97,9 +96,9 @@ def query_chromadb(parsed_input):
 # -------------------------------
 def generate_html_table(trial_results, biomarkers):
     """
-    Generate an HTML table for clinical trial results.
+    Generate an HTML table from trial results with:
     - Clickable Trial ID links
-    - Highlighted biomarkers in eligibility criteria
+    - Highlighted biomarker in eligibility criteria
     """
     html_content = """
     <style>
@@ -107,7 +106,6 @@ def generate_html_table(trial_results, biomarkers):
             width: 100%;
             border-collapse: collapse;
             font-family: Arial, sans-serif;
-            margin-top: 10px;
         }
         th, td {
             border: 1px solid #ddd;
@@ -152,19 +150,16 @@ def generate_html_table(trial_results, biomarkers):
         gender = row["sex"]
         start_date = row["startDate"]
         country = row["country"]
-
+        
         # Highlight biomarkers in eligibility text
         eligibility = row["eligibility"]
-        highlighted_biomarkers = []
         for biomarker in biomarkers:
-            if biomarker in eligibility:
-                eligibility = eligibility.replace(biomarker, f'<span class="highlight">{biomarker}</span>')
-                highlighted_biomarkers.append(biomarker)
-        
+            eligibility = eligibility.replace(biomarker, f'<span class="highlight">{biomarker}</span>')
+
         html_content += f"""
         <tr>
             <td><a href="{trial_link}" target="_blank">{trial_id}</a></td>
-            <td>{', '.join(highlighted_biomarkers) if highlighted_biomarkers else 'N/A'}</td>
+            <td>{', '.join(biomarkers)}</td>
             <td>{condition}</td>
             <td>{status}</td>
             <td>{study_size}</td>
@@ -175,11 +170,11 @@ def generate_html_table(trial_results, biomarkers):
         """
 
     html_content += "</table>"
-
     return html_content
 
-
-# ✅ **Streamlit UI**
+# -------------------------------
+# ✅ Streamlit UI
+# -------------------------------
 st.set_page_config(page_title="🧬 Biomarker-Based Clinical Trial Finder", page_icon="🧬", layout="wide")
 
 st.markdown("""
@@ -188,9 +183,8 @@ st.markdown("""
     <hr>
     """, unsafe_allow_html=True)
 
-# **User Input**
-user_input = st.text_area("Enter clinical trial eligibility criteria:", 
-                          placeholder="e.g., BRAF mutation, age > 50, gender=male, country=United States")
+# User Input
+user_input = st.text_area("Enter clinical trial eligibility criteria:", placeholder="e.g., BRAF mutation, age > 50, gender=male, country=United States")
 
 if st.button("🔍 Extract Biomarkers & Find Trials"):
     if user_input.strip():
@@ -201,17 +195,16 @@ if st.button("🔍 Extract Biomarkers & Find Trials"):
         if isinstance(response, dict):
             st.json(response)  # Show extracted biomarkers & filters
             
-            # **Extract relevant fields**
-            biomarkers = [b for sublist in response.get("inclusion_biomarker", []) for b in sublist]
+            # Extract biomarker list
+            biomarkers = flatten_list(response.get('inclusion_biomarker', []))
 
-            # **Query ChromaDB with extracted biomarkers**
+            # Query ChromaDB with extracted biomarkers
             st.markdown("### 🔍 Matching Clinical Trials:")
             trial_results = query_chromadb(response)
             
             if not trial_results.empty:
-                # **Generate and display HTML table**
-                table_html = generate_html_table(trial_results, biomarkers)
-                html(table_html, height=500, scrolling=True)
+                # Generate and display formatted HTML table
+                st.markdown(generate_html_table(trial_results, biomarkers), unsafe_allow_html=True)
             else:
                 st.warning("⚠️ No matching trials found!")
         else:
