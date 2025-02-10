@@ -181,7 +181,7 @@ def query_chromadb(parsed_input):
     # Query ChromaDB with metadata filtering
     results = collection.query(
         query_embeddings=[query_embedding.tolist()],
-        n_results=10,  # Fetch top 10 matches
+        n_results=20,  # Fetch top 10 matches
         where=metadata_filters  # Apply strict filters
     )
 
@@ -244,7 +244,7 @@ if st.button("🔍 Extract Biomarkers & Find Trials"):
             st.json(response)  # Show extracted biomarkers & filters
             
             # Query ChromaDB with extracted biomarkers
-            st.markdown("### 🔍 Matching Clinical Trials:")
+            st.markdown("### 🔍 Matched Clinical Trials:")
             trial_results = query_chromadb(response)
             
             if not trial_results.empty:
@@ -258,7 +258,16 @@ if st.button("🔍 Extract Biomarkers & Find Trials"):
         st.warning("⚠️ Please enter some clinical text before extracting biomarkers!")
 
 
-
+# -----------------------------------------------------------------------------
+# Footer
+# -----------------------------------------------------------------------------
+st.markdown(
+    """
+    <hr>
+    <p style='text-align: center; font-size: 14px;'>🔬 Developed for Precision Medicine 🏥</p>
+    """,
+    unsafe_allow_html=True,
+)
 
 
 
