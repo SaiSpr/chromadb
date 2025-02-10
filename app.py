@@ -10,7 +10,6 @@ import torch
 from sentence_transformers import SentenceTransformer
 from gradio_client import Client
 import re
-import plotly.graph_objects as go  # Import Plotly
 
 # -------------------------------
 # ✅ Initialize Hugging Face Client
@@ -73,7 +72,6 @@ def canonical_country(country):
     c = country.lower().replace(".", "").replace(" ", "")
     if c in ["us", "usa", "unitedstates", "america"]:
         return "United States"
-    # Add more mappings if needed
     return country.title()  # Default to title-case
 
 def canonical_gender(gender):
@@ -109,7 +107,6 @@ def canonical_status(status):
     elif s in ["active_not_recruiting", "active not recruiting", "active", "ongoing", "in progress"]:
         return "ACTIVE_NOT_RECRUITING"
     else:
-        # If the input does not match any known synonym, return the uppercase version.
         return status.upper()
 
 def build_metadata_filter(parsed_input):
@@ -145,13 +142,12 @@ def build_metadata_filter(parsed_input):
         status_val = canonical_status(parsed_input["status"])
         filters.append({"overallStatus": {"$eq": status_val}})
 
-    # Combining Filters
     if len(filters) == 1:
-        return filters[0]  # Single filter, no need for `$and`
+        return filters[0]
     elif len(filters) > 1:
-        return {"$and": filters}  # Apply multiple conditions
+        return {"$and": filters}
     else:
-        return None  # No filters applied
+        return None
 
 # -------------------------------
 # ✅ Query ChromaDB Based on Extracted JSON
@@ -176,14 +172,12 @@ def query_chromadb(parsed_input):
 
     query_embedding = embedding_model.encode(query_text, convert_to_tensor=False)
 
-    # Query ChromaDB with metadata filtering
     results = collection.query(
         query_embeddings=[query_embedding.tolist()],
         n_results=20,  # Fetch top 20 matches
-        where=metadata_filters  # Apply strict filters
+        where=metadata_filters
     )
 
-    # Convert results into a DataFrame
     if results and "metadatas" in results and results["metadatas"]:
         df = pd.DataFrame(results["metadatas"][0])
         return df
@@ -235,36 +229,30 @@ user_input = st.text_area("Provide key biomarkers and eligibility criteria to fi
 
 if st.button("🔍 Extract Biomarkers & Find Trials"):
     if user_input.strip():
-        # Extract Biomarkers
         st.markdown("### 🧬 Extracted Biomarkers & Filters:")
         response = get_model_response(user_input)
 
         if isinstance(response, dict):
-            st.json(response)  # Show extracted biomarkers & filters
+            st.json(response)
             
-            # Query ChromaDB with extracted biomarkers
             st.markdown("### 🔍 Matched Clinical Trials:")
             trial_results = query_chromadb(response)
             
             if not trial_results.empty:
                 formatted_results = format_results_as_table(trial_results, response)
                 
-                # Use Plotly to create a custom table with bold headers and proper alignment
-                fig = go.Figure(data=[go.Table(
-                    header=dict(
-                        values=[f"<b>{col}</b>" for col in formatted_results.columns],
-                        fill_color='paleturquoise',
-                        align='center',
-                        font=dict(color='black', size=14)
-                    ),
-                    cells=dict(
-                        values=[formatted_results[col].tolist() for col in formatted_results.columns],
-                        fill_color='lavender',
-                        align='left',
-                        font=dict(color='black', size=12)
-                    )
-                )])
-                st.plotly_chart(fig, use_container_width=True)
+                # Use Pandas Styler to create a table with borders (similar to Excel)
+                styled_table = formatted_results.style\
+                    .set_table_attributes('border="1" class="dataframe"')\
+                    .set_table_styles([
+                        {'selector': 'th', 'props': [('border', '1px solid black'),
+                                                     ('padding', '8px'),
+                                                     ('text-align', 'center'),
+                                                     ('background-color', '#f2f2f2')]},
+                        {'selector': 'td', 'props': [('border', '1px solid black'),
+                                                     ('padding', '8px')]}
+                    ])
+                st.markdown(styled_table.render(), unsafe_allow_html=True)
             else:
                 st.warning("⚠️ No matching trials found!")
         else:
