@@ -106,21 +106,22 @@ def generate_html_table(trial_results, biomarkers):
             width: 100%;
             border-collapse: collapse;
             font-family: Arial, sans-serif;
+            border: 1px solid #ddd;
         }
         th, td {
             border: 1px solid #ddd;
-            padding: 10px;
+            padding: 8px;
             text-align: left;
         }
         th {
             background-color: #4CAF50;
             color: white;
         }
-        td a {
+        a {
             color: #007bff;
             text-decoration: none;
         }
-        td a:hover {
+        a:hover {
             text-decoration: underline;
         }
         .highlight {
@@ -150,7 +151,7 @@ def generate_html_table(trial_results, biomarkers):
         gender = row["sex"]
         start_date = row["startDate"]
         country = row["country"]
-        
+
         # Highlight biomarkers in eligibility text
         eligibility = row["eligibility"]
         for biomarker in biomarkers:
@@ -170,7 +171,6 @@ def generate_html_table(trial_results, biomarkers):
         """
 
     html_content += "</table>"
-    
     return html_content
 
 # -------------------------------
@@ -204,8 +204,8 @@ if st.button("🔍 Extract Biomarkers & Find Trials"):
             trial_results = query_chromadb(response)
             
             if not trial_results.empty:
-                # Generate and display formatted HTML table using `st.write()`
-                st.write(generate_html_table(trial_results, biomarkers), unsafe_allow_html=True)
+                # Generate and display formatted HTML table
+                st.markdown(generate_html_table(trial_results, biomarkers), unsafe_allow_html=True)
             else:
                 st.warning("⚠️ No matching trials found!")
         else:
