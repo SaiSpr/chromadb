@@ -61,18 +61,18 @@ def parse_filter_criteria(filter_value):
     return None, None  # Return None if no valid filter is found
 
 # ---
-# New Helper Functions: Canonicalization for country and gender
+# New Helper Functions: Canonicalization for country, gender, and status
 # ---
 
 def canonical_country(country):
     """
     Maps various country synonyms to a canonical country name.
-    For example, "us", "u.s", "usa", "u.s.a", and "america" will be converted to "United States".
+    For example, "us", "u.s","u.s." "usa", "u.s.a", and "america" will be converted to "United States".
     """
     if not country:
         return country
     c = country.lower().replace(".", "").replace(" ", "")
-    if c in ["us", "usa", "us", "usa", "unitedstates", "america"]:
+    if c in ["us", "usa", "unitedstates", "america"]:
         return "United States"
     # Add more mappings if needed
     return country.title()  # Default to title-case
@@ -86,11 +86,32 @@ def canonical_gender(gender):
     if not gender:
         return gender
     g = gender.lower().strip()
-    if g in ["women", "w", "woman", "female", "f"]:
+    if g in ["women", "w", "woman", "female", "f","W","F"]:
         return "FEMALE"
-    elif g in ["men", "m", "man", "male"]:
+    elif g in ["men", "m", "man", "male","M"]:
         return "MALE"
     return gender.upper()
+
+def canonical_status(status):
+    """
+    Maps various status synonyms to a canonical status.
+    For example:
+      - Inputs like "complete", "finished", "done" will be mapped to "COMPLETED".
+      - Inputs like "recruiting", "enrolling", "open" will be mapped to "RECRUITING".
+      - Inputs like "active not recruiting", "active", "ongoing", "in progress" will be mapped to "ACTIVE_NOT_RECRUITING".
+    """
+    if not status:
+        return status
+    s = status.lower().strip()
+    if s in ["completed", "complete", "finished", "done", "closed"]:
+        return "COMPLETED"
+    elif s in ["recruiting", "enrolling", "open", "open to enrollment", "active recruiting"]:
+        return "RECRUITING"
+    elif s in ["active_not_recruiting", "active not recruiting", "active", "ongoing", "in progress"]:
+        return "ACTIVE_NOT_RECRUITING"
+    else:
+        # If the input does not match any known synonym, return the uppercase version.
+        return status.upper()
 
 def build_metadata_filter(parsed_input):
     """
@@ -120,9 +141,10 @@ def build_metadata_filter(parsed_input):
         gender_val = canonical_gender(parsed_input["gender"])
         filters.append({"sex": {"$in": ["ALL", gender_val]}})
 
-    # Status Filter (Exact Match)
+    # Status Filter (Exact Match using canonicalization)
     if parsed_input.get("status"):
-        filters.append({"overallStatus": {"$eq": parsed_input["status"].upper()}})
+        status_val = canonical_status(parsed_input["status"])
+        filters.append({"overallStatus": {"$eq": status_val}})
 
     # Combining Filters
     if len(filters) == 1:
@@ -142,7 +164,6 @@ def flatten_list(nested_list):
 
 def query_chromadb(parsed_input):
     """Search ChromaDB using extracted biomarker JSON & strict metadata filters."""
-
     metadata_filters = build_metadata_filter(parsed_input)
 
     query_text = f"""
@@ -176,7 +197,6 @@ def query_chromadb(parsed_input):
 # -------------------------------
 def format_results_as_table(df, extracted_biomarkers):
     """Format clinical trial results into a structured DataFrame for display."""
-    
     table_data = []
     
     for _, row in df.iterrows():
@@ -210,7 +230,7 @@ st.markdown("""
     """, unsafe_allow_html=True)
 
 # User Input
-user_input = st.text_area("Enter clinical trial eligibility criteria:", placeholder="e.g., BRAF mutation, age > 50, gender=male, country=China")
+user_input = st.text_area("Enter clinical trial eligibility criteria:", placeholder="e.g., BRAF mutation, age > 50, gender=male, country=China, status=recruiting")
 
 if st.button("🔍 Extract Biomarkers & Find Trials"):
     if user_input.strip():
@@ -234,6 +254,9 @@ if st.button("🔍 Extract Biomarkers & Find Trials"):
             st.error("❌ Error in fetching response. Please try again.")
     else:
         st.warning("⚠️ Please enter some clinical text before extracting biomarkers!")
+
+
+
 
 
 
