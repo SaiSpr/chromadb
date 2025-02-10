@@ -1,12 +1,16 @@
+__import__('pysqlite3')
+import sys
+sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+import pysqlite3 as sqlite3
+
 import streamlit as st
 import pandas as pd
 import chromadb
 import torch
 from sentence_transformers import SentenceTransformer
 from gradio_client import Client
-__import__('pysqlite3')
-import sys
-sys.modules['sqlite3'] = sys.modules.pop('pysqlite3')
+
+
 
 # -------------------------------
 # ✅ Initialize Hugging Face Client
