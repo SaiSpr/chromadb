@@ -1,1 +1,7 @@
 gradio_client
+streamlit
+gradio_client
+chromadb
+sentence-transformers
+pandas
+numpy
