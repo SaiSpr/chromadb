@@ -10,6 +10,7 @@ import torch
 from sentence_transformers import SentenceTransformer
 from gradio_client import Client
 import re
+import plotly.graph_objects as go  # Import Plotly
 
 # -------------------------------
 # ✅ Initialize Hugging Face Client
@@ -65,7 +66,7 @@ def parse_filter_criteria(filter_value):
 def canonical_country(country):
     """
     Maps various country synonyms to a canonical country name.
-    For example, "us", "u.s","u.s." "usa", "u.s.a", and "america" will be converted to "United States".
+    For example, "us", "u.s", "u.s.", "usa", "u.s.a", and "america" will be converted to "United States".
     """
     if not country:
         return country
@@ -216,51 +217,6 @@ def format_results_as_table(df, extracted_biomarkers):
     return table_df
 
 # -------------------------------
-# ✅ Render HTML Table Function
-# -------------------------------
-def render_html_table(df):
-    """Convert a DataFrame to a custom HTML table with CSS styling."""
-    # Define custom CSS styles for the table
-    html = """
-    <style>
-    table.custom-table {
-      width: 100%;
-      border-collapse: collapse;
-      margin: 20px 0;
-      font-family: Arial, sans-serif;
-      font-size: 14px;
-    }
-    table.custom-table th, table.custom-table td {
-      border: 1px solid #ddd;
-      padding: 8px;
-    }
-    table.custom-table th {
-      background-color: #f2f2f2;
-      text-align: center;
-      font-weight: bold;
-    }
-    table.custom-table td {
-      text-align: left;
-    }
-    </style>
-    <table class="custom-table">
-    <thead>
-      <tr>
-    """
-    # Create table header
-    for col in df.columns:
-        html += f"<th>{col}</th>"
-    html += "</tr></thead><tbody>"
-    # Create table rows
-    for _, row in df.iterrows():
-        html += "<tr>"
-        for col in df.columns:
-            html += f"<td>{row[col]}</td>"
-        html += "</tr>"
-    html += "</tbody></table>"
-    return html
-
-# -------------------------------
 # ✅ Streamlit UI
 # -------------------------------
 st.set_page_config(page_title="🧬Galileo", page_icon="🧬", layout="wide")
@@ -292,9 +248,23 @@ if st.button("🔍 Extract Biomarkers & Find Trials"):
             
             if not trial_results.empty:
                 formatted_results = format_results_as_table(trial_results, response)
-                # Instead of using st.table, render the HTML table:
-                html_table = render_html_table(formatted_results)
-                st.markdown(html_table, unsafe_allow_html=True)
+                
+                # Use Plotly to create a custom table with bold headers and proper alignment
+                fig = go.Figure(data=[go.Table(
+                    header=dict(
+                        values=[f"<b>{col}</b>" for col in formatted_results.columns],
+                        fill_color='paleturquoise',
+                        align='center',
+                        font=dict(color='black', size=14)
+                    ),
+                    cells=dict(
+                        values=[formatted_results[col].tolist() for col in formatted_results.columns],
+                        fill_color='lavender',
+                        align='left',
+                        font=dict(color='black', size=12)
+                    )
+                )])
+                st.plotly_chart(fig, use_container_width=True)
             else:
                 st.warning("⚠️ No matching trials found!")
         else:
