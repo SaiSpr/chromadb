@@ -67,7 +67,7 @@ def parse_filter_criteria(filter_value):
 def canonical_country(country):
     """
     Maps various country synonyms to a canonical country name.
-    For example, "us", "u.s","u.s." "usa", "u.s.a", and "america" will be converted to "United States".
+    For example, "us", "u.s", "u.s." "usa", "u.s.a", and "america" will be converted to "United States".
     """
     if not country:
         return country
@@ -197,7 +197,7 @@ def query_chromadb(parsed_input):
 # -------------------------------
 def format_results_as_table(df, extracted_biomarkers):
     """Format clinical trial results into a structured DataFrame for display.
-       The Biomarker column has been removed from the output.
+       The Biomarker column is removed and an Ages column is added.
     """
     table_data = []
     
@@ -207,6 +207,7 @@ def format_results_as_table(df, extracted_biomarkers):
             row["condition"],
             row["overallStatus"],
             row["count"],
+            row["age"],
             row["sex"],
             row["startDate"],
             row["country"]
@@ -214,7 +215,7 @@ def format_results_as_table(df, extracted_biomarkers):
 
     table_df = pd.DataFrame(
         table_data,
-        columns=["Trial ID", "Condition", "Status", "Study Size", "Gender", "Start Date", "Country"]
+        columns=["Trial ID", "Condition", "Status", "Study Size", "Ages", "Gender", "Start Date", "Country"]
     )
     
     return table_df
@@ -269,6 +270,7 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
 
 
 
