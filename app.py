@@ -1,53 +1,144 @@
-# import streamlit as st
-# from streamlit_chromadb_connection.chromadb_connection import ChromadbConnection
-
-# configuration = {
-#     "client": "PersistentClient",
-#     "path": "/tmp/.chroma"
-# }
-
-# collection_name = "documents_collection"
-
-# conn = st.connection("chromadb",
-#                      type=ChromaDBConnection,
-#                      **configuration)
-# documents_collection_df = conn.get_collection_data(collection_name)
-# st.dataframe(documents_collection_df)
-
 import streamlit as st
+import pandas as pd
+import chromadb
+import torch
+from sentence_transformers import SentenceTransformer
 from gradio_client import Client
 
-# Initialize the Hugging Face client
-client = Client("SaiPrakashTut/Galileo_twostep_gpu")
+# -------------------------------
+# ✅ Initialize Hugging Face Client
+# -------------------------------
+HF_CLIENT = Client("SaiPrakashTut/Galileo_twostep_gpu")
 
 def get_model_response(input_text):
-    """Send input text to the Hugging Face model and return the response."""
+    """Send input text to Hugging Face model and return the response."""
     try:
-        result = client.predict(
+        result = HF_CLIENT.predict(
             input_text=input_text,
             api_name="/extract_criteria"
         )
-        return result
+        return result  # This should be JSON with extracted biomarkers and filters
     except Exception as e:
         return f"Error: {str(e)}"
 
-# Streamlit UI
-st.set_page_config(page_title="🧬 Biomarker Extraction Tool 🏥", page_icon="🧬", layout="wide")
+# -------------------------------
+# ✅ Initialize ChromaDB
+# -------------------------------
+CHROMA_DB_DIR = "./"  # Ensure correct folder path
+
+# Initialize ChromaDB
+client = chromadb.PersistentClient(path=CHROMA_DB_DIR)
+collection = client.get_collection("clinical_trials")
+
+# Load embedding model (Force CPU for Hugging Face Spaces)
+device = "cuda" if torch.cuda.is_available() else "cpu"
+embedding_model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
+
+# -------------------------------
+# ✅ Query ChromaDB Based on Extracted JSON
+# -------------------------------
+def query_chromadb(parsed_input):
+    """Search ChromaDB based on extracted biomarker JSON criteria."""
+
+    query_text = f"""
+    Biomarkers: {', '.join(parsed_input.get('inclusion_biomarker', []))}
+    Exclusions: {', '.join(parsed_input.get('exclusion_biomarker', []))}
+    Status: {parsed_input.get('status', '')}
+    Study Size: {parsed_input.get('study_size', '')}
+    Ages: {parsed_input.get('ages', '')}
+    Gender: {parsed_input.get('gender', '')}
+    Country: {parsed_input.get('country', '')}
+    """
+
+    query_embedding = embedding_model.encode(query_text, convert_to_tensor=False)
+
+    # Query ChromaDB for similar records
+    results = collection.query(
+        query_embeddings=[query_embedding.tolist()],
+        n_results=5  # Fetch top 5 matches
+    )
+
+    # Convert results into a DataFrame
+    if results and "metadatas" in results and results["metadatas"]:
+        df = pd.DataFrame(results["metadatas"][0])
+        return df
+    else:
+        return pd.DataFrame(columns=["nctId", "condition", "eligibility", "briefSummary", "overallStatus", "age", "count", "sex", "country", "startDate"])
+
+# -------------------------------
+# ✅ Streamlit UI
+# -------------------------------
+st.set_page_config(page_title="🧬 Biomarker-Based Clinical Trial Finder", page_icon="🧬", layout="wide")
 
 st.markdown("""
-    <h1 style='text-align: center; color: #4CAF50;'>🧬 Biomarker Extraction Tool 🏥</h1>
-    <p style='text-align: center; font-size: 18px;'>Extract genomic biomarkers from clinical trial texts!</p>
+    <h1 style='text-align: center; color: #4CAF50;'>🧬 Biomarker-Based Clinical Trial Finder 🏥</h1>
+    <p style='text-align: center; font-size: 18px;'>Enter clinical text, extract biomarkers, and find matching trials!</p>
     <hr>
     """, unsafe_allow_html=True)
 
-# User input
-user_input = st.text_area("Enter the clinical trial eligibility criteria below:", placeholder="e.g., braf or kras")
+# User Input
+user_input = st.text_area("Enter clinical trial eligibility criteria:", placeholder="e.g., BRAF mutation, age > 50, gender=male, country=United States")
 
-if st.button("🔍 Extract Biomarkers"):
+if st.button("🔍 Extract Biomarkers & Find Trials"):
     if user_input.strip():
-        st.markdown("### 🧬 Extracted Biomarkers:")
+        # Extract Biomarkers
+        st.markdown("### 🧬 Extracted Biomarkers & Filters:")
         response = get_model_response(user_input)
-        st.json(response)
+
+        if isinstance(response, dict):
+            st.json(response)  # Show extracted biomarkers & filters
+            
+            # Query ChromaDB with extracted biomarkers
+            st.markdown("### 🔍 Matching Clinical Trials:")
+            trial_results = query_chromadb(response)
+            
+            if not trial_results.empty:
+                st.dataframe(trial_results)
+            else:
+                st.warning("⚠️ No matching trials found!")
+        else:
+            st.error("❌ Error in fetching response. Please try again.")
     else:
         st.warning("⚠️ Please enter some clinical text before extracting biomarkers!")
+
+
+
+
+
+# import streamlit as st
+# from gradio_client import Client
+
+# # Initialize the Hugging Face client
+# client = Client("SaiPrakashTut/Galileo_twostep_gpu")
+
+# def get_model_response(input_text):
+#     """Send input text to the Hugging Face model and return the response."""
+#     try:
+#         result = client.predict(
+#             input_text=input_text,
+#             api_name="/extract_criteria"
+#         )
+#         return result
+#     except Exception as e:
+#         return f"Error: {str(e)}"
+
+# # Streamlit UI
+# st.set_page_config(page_title="🧬 Biomarker Extraction Tool 🏥", page_icon="🧬", layout="wide")
+
+# st.markdown("""
+#     <h1 style='text-align: center; color: #4CAF50;'>🧬 Biomarker Extraction Tool 🏥</h1>
+#     <p style='text-align: center; font-size: 18px;'>Extract genomic biomarkers from clinical trial texts!</p>
+#     <hr>
+#     """, unsafe_allow_html=True)
+
+# # User input
+# user_input = st.text_area("Enter the clinical trial eligibility criteria below:", placeholder="e.g., braf or kras")
+
+# if st.button("🔍 Extract Biomarkers"):
+#     if user_input.strip():
+#         st.markdown("### 🧬 Extracted Biomarkers:")
+#         response = get_model_response(user_input)
+#         st.json(response)
+#     else:
+#         st.warning("⚠️ Please enter some clinical text before extracting biomarkers!")
 
