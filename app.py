@@ -215,7 +215,7 @@ def format_results_as_table(df, extracted_biomarkers):
 
     table_df = pd.DataFrame(
         table_data,
-        columns=["Trial ID", "Biomarker", "Condition", "Status", "Study Size", "Gender", "Start Date", "Country"]
+        columns=["Trial ID", "Condition", "Status", "Study Size", "Gender", "Start Date", "Country"]
     )
     
     return table_df
