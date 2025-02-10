@@ -192,11 +192,14 @@ def query_chromadb(parsed_input):
     else:
         return pd.DataFrame(columns=["nctId", "condition", "eligibility", "briefSummary", "overallStatus", "age", "count", "sex", "country", "startDate"])
 
+# (imports and previous functions remain unchanged)
+
 # -------------------------------
 # ✅ Convert Data to Static Table Format
 # -------------------------------
 def format_results_as_table(df, extracted_biomarkers):
     """Format clinical trial results into a structured DataFrame for display."""
+    
     table_data = []
     
     for _, row in df.iterrows():
@@ -221,18 +224,17 @@ def format_results_as_table(df, extracted_biomarkers):
 # -------------------------------
 # ✅ Streamlit UI
 # -------------------------------
-st.set_page_config(page_title="🧬Galileo", page_icon="🧬", layout="wide")
+st.set_page_config(page_title="🧬 Biomarker-Based Clinical Trial Finder", page_icon="🧬", layout="wide")
 
 st.markdown("""
-    <h1 style='text-align: center; color: #4CAF50;'>🧬 Galileo </h1>
-    <p style='text-align: center; font-size: 18px;'>Biomarker-Based Clinical Trial Matching!</p>
+    <h1 style='text-align: center; color: #4CAF50;'>🧬 Biomarker-Based Clinical Trial Finder 🏥</h1>
+    <p style='text-align: center; font-size: 18px;'>Enter clinical text, extract biomarkers, and find matching trials!</p>
     <hr>
     """, unsafe_allow_html=True)
 
-st.markdown("### 🩸 Enter Biomarker Criteria:")
-
 # User Input
-user_input = st.text_area("Provide key biomarkers and eligibility criteria to find relevant trials below 👇", placeholder="e.g., Identify lung carer trials for patients with an ALK fusion OR ROS1 rearrangement, age: > 50, gender:male, country:us, study_size:>=50, status=recruiting")
+user_input = st.text_area("Enter clinical trial eligibility criteria:", 
+                          placeholder="e.g., BRAF mutation, age > 50, gender=male, country=China, status=recruiting")
 
 if st.button("🔍 Extract Biomarkers & Find Trials"):
     if user_input.strip():
@@ -244,18 +246,43 @@ if st.button("🔍 Extract Biomarkers & Find Trials"):
             st.json(response)  # Show extracted biomarkers & filters
             
             # Query ChromaDB with extracted biomarkers
-            st.markdown("### 🔍 Matched Clinical Trials:")
+            st.markdown("### 🔍 Matching Clinical Trials:")
             trial_results = query_chromadb(response)
             
             if not trial_results.empty:
                 formatted_results = format_results_as_table(trial_results, response)
-                st.table(formatted_results)  # Display as static table
+                
+                # Convert the DataFrame to HTML with custom styling
+                table_html = formatted_results.to_html(index=False, escape=False)
+                
+                # Custom CSS to style the table
+                custom_css = """
+                <style>
+                table {
+                  width: 100%;
+                  border-collapse: collapse;
+                }
+                th, td {
+                  border: 1px solid #ddd;
+                  padding: 8px;
+                  text-align: center;
+                  white-space: nowrap;
+                }
+                th {
+                  font-weight: bold;
+                  background-color: #f2f2f2;
+                }
+                </style>
+                """
+                # Display the styled HTML table
+                st.markdown(custom_css + table_html, unsafe_allow_html=True)
             else:
                 st.warning("⚠️ No matching trials found!")
         else:
             st.error("❌ Error in fetching response. Please try again.")
     else:
         st.warning("⚠️ Please enter some clinical text before extracting biomarkers!")
+
 
 
 # -----------------------------------------------------------------------------
