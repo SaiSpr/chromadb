@@ -44,12 +44,17 @@ embedding_model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
 # -------------------------------
 # ✅ Query ChromaDB Based on Extracted JSON
 # -------------------------------
+
+def flatten_list(nested_list):
+    """Flattens a list of lists into a single list."""
+    return [item for sublist in nested_list for item in (sublist if isinstance(sublist, list) else [sublist])]
+
 def query_chromadb(parsed_input):
     """Search ChromaDB based on extracted biomarker JSON criteria."""
 
     query_text = f"""
-    Biomarkers: {', '.join(parsed_input.get('inclusion_biomarker', []))}
-    Exclusions: {', '.join(parsed_input.get('exclusion_biomarker', []))}
+    Biomarkers: {', '.join(flatten_list(parsed_input.get('inclusion_biomarker', [])))}
+    Exclusions: {', '.join(flatten_list(parsed_input.get('exclusion_biomarker', [])))}
     Status: {parsed_input.get('status', '')}
     Study Size: {parsed_input.get('study_size', '')}
     Ages: {parsed_input.get('ages', '')}
