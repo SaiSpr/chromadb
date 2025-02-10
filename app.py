@@ -185,14 +185,32 @@ user_input = st.text_area("Enter clinical trial eligibility criteria:", placehol
 
 if st.button("🔍 Extract Biomarkers & Find Trials"):
     if user_input.strip():
+        # Extract Biomarkers
         st.markdown("### 🧬 Extracted Biomarkers & Filters:")
         response = get_model_response(user_input)
 
         if isinstance(response, dict):
-            st.json(response)
+            st.json(response)  # Show extracted biomarkers & filters
+            
+            # Query ChromaDB with extracted biomarkers
+            st.markdown("### 🔍 Matching Clinical Trials:")
             trial_results = query_chromadb(response)
+            
             if not trial_results.empty:
-                st.dataframe(trial_results)
+                # Show only selected columns in a plain table
+                display_columns = ["nctId", "condition", "overallstatus", "count", "sex", "startdate", "country"]
+                trial_results = trial_results.rename(columns={
+                    "nctId": "Trial ID",
+                    "condition": "Condition",
+                    "overallstatus": "Status",
+                    "count": "Study Size",
+                    "sex": "Gender",
+                    "startdate": "Start Date",
+                    "country": "Country"
+                })[display_columns]
+
+                # Display as a clean table
+                st.table(trial_results)
             else:
                 st.warning("⚠️ No matching trials found!")
         else:
