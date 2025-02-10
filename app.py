@@ -43,7 +43,6 @@ embedding_model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
 # -------------------------------
 # ✅ Helper Functions for Filtering
 # -------------------------------
-
 def parse_filter_criteria(filter_value):
     """
     Parses filter criteria (>, >=, <, <=, !=, =) into ChromaDB-supported format.
@@ -63,7 +62,6 @@ def parse_filter_criteria(filter_value):
 # ---
 # New Helper Functions: Canonicalization for country, gender, and status
 # ---
-
 def canonical_country(country):
     """
     Maps various country synonyms to a canonical country name.
@@ -86,9 +84,9 @@ def canonical_gender(gender):
     if not gender:
         return gender
     g = gender.lower().strip()
-    if g in ["women", "w", "woman", "female", "f","W","F"]:
+    if g in ["women", "w", "woman", "female", "f", "W", "F"]:
         return "FEMALE"
-    elif g in ["men", "m", "man", "male","M"]:
+    elif g in ["men", "m", "man", "male", "M"]:
         return "MALE"
     return gender.upper()
 
@@ -157,7 +155,6 @@ def build_metadata_filter(parsed_input):
 # -------------------------------
 # ✅ Query ChromaDB Based on Extracted JSON
 # -------------------------------
-
 def flatten_list(nested_list):
     """Flattens a list of lists into a single list."""
     return [item for sublist in nested_list for item in (sublist if isinstance(sublist, list) else [sublist])]
@@ -181,7 +178,7 @@ def query_chromadb(parsed_input):
     # Query ChromaDB with metadata filtering
     results = collection.query(
         query_embeddings=[query_embedding.tolist()],
-        n_results=20,  # Fetch top 10 matches
+        n_results=20,  # Fetch top 20 matches
         where=metadata_filters  # Apply strict filters
     )
 
@@ -191,8 +188,6 @@ def query_chromadb(parsed_input):
         return df
     else:
         return pd.DataFrame(columns=["nctId", "condition", "eligibility", "briefSummary", "overallStatus", "age", "count", "sex", "country", "startDate"])
-
-# (imports and previous functions remain unchanged)
 
 # -------------------------------
 # ✅ Convert Data to Static Table Format
@@ -215,10 +210,55 @@ def format_results_as_table(df, extracted_biomarkers):
 
     table_df = pd.DataFrame(
         table_data,
-        columns=["Trial ID", "Condition", "Status", "Study Size", "Gender", "Start Date", "Country"]
+        columns=["Trial ID", "Biomarker", "Condition", "Status", "Study Size", "Gender", "Start Date", "Country"]
     )
     
     return table_df
+
+# -------------------------------
+# ✅ Render HTML Table Function
+# -------------------------------
+def render_html_table(df):
+    """Convert a DataFrame to a custom HTML table with CSS styling."""
+    # Define custom CSS styles for the table
+    html = """
+    <style>
+    table.custom-table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 20px 0;
+      font-family: Arial, sans-serif;
+      font-size: 14px;
+    }
+    table.custom-table th, table.custom-table td {
+      border: 1px solid #ddd;
+      padding: 8px;
+    }
+    table.custom-table th {
+      background-color: #f2f2f2;
+      text-align: center;
+      font-weight: bold;
+    }
+    table.custom-table td {
+      text-align: left;
+    }
+    </style>
+    <table class="custom-table">
+    <thead>
+      <tr>
+    """
+    # Create table header
+    for col in df.columns:
+        html += f"<th>{col}</th>"
+    html += "</tr></thead><tbody>"
+    # Create table rows
+    for _, row in df.iterrows():
+        html += "<tr>"
+        for col in df.columns:
+            html += f"<td>{row[col]}</td>"
+        html += "</tr>"
+    html += "</tbody></table>"
+    return html
 
 # -------------------------------
 # ✅ Streamlit UI
@@ -234,7 +274,8 @@ st.markdown("""
 st.markdown("### 🩸 Enter Biomarker Criteria:")
 
 # User Input
-user_input = st.text_area("Provide key biomarkers and eligibility criteria to find relevant trials below 👇", placeholder="e.g., Identify lung carer trials for patients with an ALK fusion OR ROS1 rearrangement, age: > 50, gender:male, country:us, study_size:>=50, status=recruiting")
+user_input = st.text_area("Provide key biomarkers and eligibility criteria to find relevant trials below 👇", 
+                          placeholder="e.g., Identify lung cancer trials for patients with an ALK fusion OR ROS1 rearrangement, age: > 50, gender:male, country:us, study_size:>=50, status=recruiting")
 
 if st.button("🔍 Extract Biomarkers & Find Trials"):
     if user_input.strip():
@@ -251,15 +292,15 @@ if st.button("🔍 Extract Biomarkers & Find Trials"):
             
             if not trial_results.empty:
                 formatted_results = format_results_as_table(trial_results, response)
-                st.table(formatted_results)  # Display as static table
+                # Instead of using st.table, render the HTML table:
+                html_table = render_html_table(formatted_results)
+                st.markdown(html_table, unsafe_allow_html=True)
             else:
                 st.warning("⚠️ No matching trials found!")
         else:
             st.error("❌ Error in fetching response. Please try again.")
     else:
         st.warning("⚠️ Please enter some clinical text before extracting biomarkers!")
-
-
 
 # -----------------------------------------------------------------------------
 # Footer
