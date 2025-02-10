@@ -43,6 +43,7 @@ embedding_model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
 # -------------------------------
 # ✅ Helper Functions for Filtering
 # -------------------------------
+
 def parse_filter_criteria(filter_value):
     """
     Parses filter criteria (>, >=, <, <=, !=, =) into ChromaDB-supported format.
@@ -62,16 +63,18 @@ def parse_filter_criteria(filter_value):
 # ---
 # New Helper Functions: Canonicalization for country, gender, and status
 # ---
+
 def canonical_country(country):
     """
     Maps various country synonyms to a canonical country name.
-    For example, "us", "u.s", "u.s.", "usa", "u.s.a", and "america" will be converted to "United States".
+    For example, "us", "u.s","u.s." "usa", "u.s.a", and "america" will be converted to "United States".
     """
     if not country:
         return country
     c = country.lower().replace(".", "").replace(" ", "")
     if c in ["us", "usa", "unitedstates", "america"]:
         return "United States"
+    # Add more mappings if needed
     return country.title()  # Default to title-case
 
 def canonical_gender(gender):
@@ -107,6 +110,7 @@ def canonical_status(status):
     elif s in ["active_not_recruiting", "active not recruiting", "active", "ongoing", "in progress"]:
         return "ACTIVE_NOT_RECRUITING"
     else:
+        # If the input does not match any known synonym, return the uppercase version.
         return status.upper()
 
 def build_metadata_filter(parsed_input):
@@ -142,16 +146,18 @@ def build_metadata_filter(parsed_input):
         status_val = canonical_status(parsed_input["status"])
         filters.append({"overallStatus": {"$eq": status_val}})
 
+    # Combining Filters
     if len(filters) == 1:
-        return filters[0]
+        return filters[0]  # Single filter, no need for `$and`
     elif len(filters) > 1:
-        return {"$and": filters}
+        return {"$and": filters}  # Apply multiple conditions
     else:
-        return None
+        return None  # No filters applied
 
 # -------------------------------
 # ✅ Query ChromaDB Based on Extracted JSON
 # -------------------------------
+
 def flatten_list(nested_list):
     """Flattens a list of lists into a single list."""
     return [item for sublist in nested_list for item in (sublist if isinstance(sublist, list) else [sublist])]
@@ -172,12 +178,14 @@ def query_chromadb(parsed_input):
 
     query_embedding = embedding_model.encode(query_text, convert_to_tensor=False)
 
+    # Query ChromaDB with metadata filtering
     results = collection.query(
         query_embeddings=[query_embedding.tolist()],
         n_results=20,  # Fetch top 20 matches
-        where=metadata_filters
+        where=metadata_filters  # Apply strict filters
     )
 
+    # Convert results into a DataFrame
     if results and "metadatas" in results and results["metadatas"]:
         df = pd.DataFrame(results["metadatas"][0])
         return df
@@ -188,13 +196,14 @@ def query_chromadb(parsed_input):
 # ✅ Convert Data to Static Table Format
 # -------------------------------
 def format_results_as_table(df, extracted_biomarkers):
-    """Format clinical trial results into a structured DataFrame for display."""
+    """Format clinical trial results into a structured DataFrame for display.
+       The Biomarker column has been removed from the output.
+    """
     table_data = []
     
     for _, row in df.iterrows():
         table_data.append([
             f"[{row['nctId']}](https://clinicaltrials.gov/study/{row['nctId']})",  # Hyperlinked ID
-            ", ".join(flatten_list(extracted_biomarkers.get("inclusion_biomarker", []))),  # Biomarker Match
             row["condition"],
             row["overallStatus"],
             row["count"],
@@ -205,7 +214,7 @@ def format_results_as_table(df, extracted_biomarkers):
 
     table_df = pd.DataFrame(
         table_data,
-        columns=["Trial ID", "Biomarker", "Condition", "Status", "Study Size", "Gender", "Start Date", "Country"]
+        columns=["Trial ID", "Condition", "Status", "Study Size", "Gender", "Start Date", "Country"]
     )
     
     return table_df
@@ -225,34 +234,24 @@ st.markdown("### 🩸 Enter Biomarker Criteria:")
 
 # User Input
 user_input = st.text_area("Provide key biomarkers and eligibility criteria to find relevant trials below 👇", 
-                          placeholder="e.g., Identify lung cancer trials for patients with an ALK fusion OR ROS1 rearrangement, age: > 50, gender:male, country:us, study_size:>=50, status=recruiting")
+                          placeholder="e.g., Identify lung carer trials for patients with an ALK fusion OR ROS1 rearrangement, age: > 50, gender:male, country:us, study_size:>=50, status=recruiting")
 
 if st.button("🔍 Extract Biomarkers & Find Trials"):
     if user_input.strip():
+        # Extract Biomarkers
         st.markdown("### 🧬 Extracted Biomarkers & Filters:")
         response = get_model_response(user_input)
 
         if isinstance(response, dict):
-            st.json(response)
+            st.json(response)  # Show extracted biomarkers & filters
             
+            # Query ChromaDB with extracted biomarkers
             st.markdown("### 🔍 Matched Clinical Trials:")
             trial_results = query_chromadb(response)
             
             if not trial_results.empty:
                 formatted_results = format_results_as_table(trial_results, response)
-                
-                # Use Pandas Styler to create a table with borders (similar to Excel)
-                styled_table = formatted_results.style\
-                    .set_table_attributes('border="1" class="dataframe"')\
-                    .set_table_styles([
-                        {'selector': 'th', 'props': [('border', '1px solid black'),
-                                                     ('padding', '8px'),
-                                                     ('text-align', 'center'),
-                                                     ('background-color', '#f2f2f2')]},
-                        {'selector': 'td', 'props': [('border', '1px solid black'),
-                                                     ('padding', '8px')]}
-                    ])
-                st.markdown(styled_table.render(), unsafe_allow_html=True)
+                st.table(formatted_results)  # Display as static table
             else:
                 st.warning("⚠️ No matching trials found!")
         else:
