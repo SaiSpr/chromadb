@@ -170,6 +170,7 @@ def generate_html_table(trial_results, biomarkers):
         """
 
     html_content += "</table>"
+    
     return html_content
 
 # -------------------------------
@@ -203,14 +204,15 @@ if st.button("🔍 Extract Biomarkers & Find Trials"):
             trial_results = query_chromadb(response)
             
             if not trial_results.empty:
-                # Generate and display formatted HTML table
-                st.markdown(generate_html_table(trial_results, biomarkers), unsafe_allow_html=True)
+                # Generate and display formatted HTML table using `st.write()`
+                st.write(generate_html_table(trial_results, biomarkers), unsafe_allow_html=True)
             else:
                 st.warning("⚠️ No matching trials found!")
         else:
             st.error("❌ Error in fetching response. Please try again.")
     else:
         st.warning("⚠️ Please enter some clinical text before extracting biomarkers!")
+
 
 
 
