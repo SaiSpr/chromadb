@@ -44,54 +44,64 @@ embedding_model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
 # ✅ Helper Functions for Filtering
 # -------------------------------
 
-def parse_filter_criteria(value):
+def parse_filter_criteria(filter_value):
     """
-    Parses filtering criteria like >50, <=60, etc., and returns the operator & number.
-    Example:
-    - ">50"  →  ("$gt", 50)
-    - "<=60" →  ("$lte", 60)
+    Parses filter criteria (>, >=, <, <=, !=, =) into ChromaDB-supported format.
+    Example: 
+      ">=50" → ("$gte", 50)
+      "<60" → ("$lt", 60)
     """
-    match = re.match(r"(>=|<=|>|<|!=|=)?(\d+)", str(value).strip())
+    import re
+
+    match = re.match(r"([<>!=]=?|=)\s*(\d+)", str(filter_value))
     if match:
-        operator, num = match.groups()
-        num = int(num)
-        return {
-            ">": "$gt",
-            ">=": "$gte",
-            "<": "$lt",
-            "<=": "$lte",
-            "=": "$eq",
-            "!=": "$ne"
-        }.get(operator, "$eq"), num
-    return None, None
+        operator_map = {
+            ">": "$gt", ">=": "$gte", "<": "$lt", "<=": "$lte", "=": "$eq", "!=": "$ne"
+        }
+        op, value = match.groups()
+        return operator_map.get(op), int(value)
+    return None, None  # Return None if no valid filter is found
+
 
 def build_metadata_filter(parsed_input):
     """
-    Constructs a ChromaDB-compatible metadata filter dynamically.
+    Constructs a ChromaDB-compatible metadata filter using `$and` for multiple conditions.
     """
-    filters = {}
+    filters = []
 
-    # Country Filter
+    # Country Filter (Exact Match)
     if parsed_input.get("country"):
-        filters["country"] = {"$eq": parsed_input["country"]}
+        filters.append({"country": {"$eq": parsed_input["country"]}})
 
-    # Study Size Filter
+    # Study Size Filter (Handles >, >=, <, <=, !=, =)
     if parsed_input.get("study_size"):
         operator, value = parse_filter_criteria(parsed_input["study_size"])
         if operator:
-            filters["count"] = {operator: value}
+            filters.append({"count": {operator: value}})
 
-    # Age Filter
+    # Age Filter (Handles >, >=, <, <=, !=, =)
     if parsed_input.get("ages"):
         operator, value = parse_filter_criteria(parsed_input["ages"])
         if operator:
-            filters["age"] = {operator: value}
+            filters.append({"age": {operator: value}})
 
-    # Gender Filter (Match 'All' or the specified gender)
+    # Gender Filter (Matches "All" or the specified gender)
     if parsed_input.get("gender"):
-        filters["sex"] = {"$in": ["ALL", parsed_input["gender"].upper()]}
+        filters.append({"sex": {"$in": ["ALL", parsed_input["gender"].upper()]}})
 
-    return filters if filters else None  # Return None if no filters exist
+    # Status Filter (Exact Match)
+    if parsed_input.get("status"):
+        filters.append({"overallStatus": {"$eq": parsed_input["status"].upper()}})
+
+    # Combining Filters
+    if len(filters) == 1:
+        return filters[0]  # Single filter, no need for `$and`
+    elif len(filters) > 1:
+        return {"$and": filters}  # Apply multiple conditions
+    else:
+        return None  # No filters applied
+
+
 
 # -------------------------------
 # ✅ Query ChromaDB Based on Extracted JSON
