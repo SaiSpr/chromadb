@@ -132,7 +132,7 @@ def standardize_date_filter(filter_str):
     """
     Convert natural language date criteria into a symbol-based ISO format.
     For example, "before March 2015" becomes "<2015-03-01".
-    If the date is in YYYY-MM format (e.g., "2011-12"), pad it to "2011-12-01".
+    If the date is incomplete (e.g., "2011-12"), pad it to "2011-12-01".
     """
     filter_str = filter_str.lower().strip()
     months = {
@@ -152,12 +152,12 @@ def standardize_date_filter(filter_str):
             month_word, year = match.groups()
             month = months.get(month_word.lower(), "01")
             return ">" + f"{year}-{month}-01"
-    # Check if already in full ISO format (YYYY-MM-DD)
+    # If already in full ISO format (YYYY-MM-DD), use it.
     match = re.match(r"([<>]=?)(\d{4}-\d{2}-\d{2})$", filter_str)
     if match:
         op, date_val = match.groups()
         return op + date_val
-    # Check if date is in YYYY-MM format, then pad with "-01"
+    # If in YYYY-MM format, pad it.
     match = re.match(r"([<>]=?)(\d{4}-\d{2})$", filter_str)
     if match:
         op, date_val = match.groups()
@@ -174,21 +174,21 @@ def parse_date_filter(filter_value):
         return op, date_val
     return None, None
 
-def convert_date_to_timestamp(date_str):
+def convert_date_to_int(date_str):
     """
-    Converts a date string in YYYY-MM-DD format to an integer Unix timestamp.
+    Converts a date string in YYYY-MM-DD format to an integer in YYYYMMDD format.
+    For example, "2020-03-01" becomes 20200301.
     """
     try:
-        dt = datetime.strptime(date_str, "%Y-%m-%d")
-        return int(dt.timestamp())
+        return int(date_str.replace("-", ""))
     except Exception:
         return None
 
 def build_metadata_filter(parsed_input):
     """
     Constructs a ChromaDB-compatible metadata filter using `$and` for multiple conditions.
-    Now includes start_date. This version converts the start_date filter value
-    into a numeric Unix timestamp.
+    Now includes start_date. This version converts the start_date filter value into an integer
+    in YYYYMMDD format, since ChromaDB expects numeric values for comparison.
     """
     filters = []
     if parsed_input.get("country"):
@@ -211,10 +211,10 @@ def build_metadata_filter(parsed_input):
     if parsed_input.get("start_date"):
         op, date_val = parse_date_filter(parsed_input["start_date"])
         if op and date_val:
-            ts = convert_date_to_timestamp(date_val)
-            if ts is not None:
+            date_int = convert_date_to_int(date_val)
+            if date_int is not None:
                 op_map = {"<": "$lt", ">": "$gt", "<=": "$lte", ">=": "$gte"}
-                filters.append({"startDate": {op_map.get(op, op): ts}})
+                filters.append({"startDate": {op_map.get(op, op): date_int}})
     if len(filters) == 1:
         return filters[0]
     elif len(filters) > 1:
@@ -307,8 +307,8 @@ def extract_criteria(input_text):
       - The text after the comma is sent to OpenAI (using structured outputs) for filter extraction.
     Post-processes filter values:
       - For study_size and ages, converts natural language to symbol format.
-      - For start_date, converts natural language date expressions to a symbol-based ISO format (padded to full date)
-        and then converts that ISO date to a Unix timestamp.
+      - For start_date, converts natural language date expressions to a symbol-based ISO format 
+        (padding incomplete dates) and then converts that ISO date to an integer (YYYYMMDD).
       - Canonicalizes status, country, and gender.
     Returns a combined JSON object.
     """
@@ -330,6 +330,7 @@ def extract_criteria(input_text):
     # Post-process numeric and date filters.
     filter_data["study_size"] = standardize_numeric_filter(filter_data.get("study_size", ""))
     filter_data["ages"] = standardize_numeric_filter(filter_data.get("ages", ""))
+    # Standardize and then convert the start_date to ISO format; then convert to int YYYYMMDD.
     filter_data["start_date"] = standardize_date_filter(filter_data.get("start_date", ""))
     filter_data["status"] = canonical_status(filter_data.get("status", ""))
     filter_data["country"] = canonical_country(filter_data.get("country", ""))
@@ -345,6 +346,7 @@ def extract_criteria(input_text):
         "country": filter_data.get("country", ""),
         "start_date": filter_data.get("start_date", "")
     }
+    
     return combined
 
 # -------------------------------
