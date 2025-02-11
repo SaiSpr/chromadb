@@ -34,7 +34,6 @@ def get_model_response(input_text):
 # ✅ Initialize ChromaDB
 # -------------------------------
 CHROMA_DB_DIR = "./"  # Ensure correct folder path
-
 client = chromadb.PersistentClient(path=CHROMA_DB_DIR)
 collection = client.get_collection("clinical_trials")
 
@@ -46,10 +45,6 @@ embedding_model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
 # ✅ Helper Functions for Filtering
 # -------------------------------
 def parse_filter_criteria(filter_value):
-    """
-    Parses filter criteria (>, >=, <, <=, !=, =) into ChromaDB-supported format.
-    Example: ">=50" → ("$gte", 50)
-    """
     match = re.match(r"([<>!=]=?|=)\s*(\d+)", str(filter_value))
     if match:
         operator_map = {">": "$gt", ">=": "$gte", "<": "$lt", "<=": "$lte", "=": "$eq", "!=": "$ne"}
@@ -58,7 +53,6 @@ def parse_filter_criteria(filter_value):
     return None, None
 
 def canonical_country(country):
-    """Convert various representations of a country to a canonical name."""
     if not country:
         return country
     c = country.lower().replace(".", "").replace(" ", "")
@@ -67,7 +61,6 @@ def canonical_country(country):
     return country.title()
 
 def canonical_gender(gender):
-    """Convert various representations of gender to canonical values."""
     if not gender:
         return gender
     g = gender.lower().strip()
@@ -78,11 +71,6 @@ def canonical_gender(gender):
     return gender.upper()
 
 def canonical_status(status):
-    """
-    Map synonyms for status into one of the standardized values:
-    RECRUITING, WITHDRAWN, NOT_YET_RECRUITING, UNKNOWN, ACTIVE_NOT_RECRUITING, COMPLETED.
-    (In this example, "closed"/"finished"/"done"/"terminated" are mapped to "TERMINATED".)
-    """
     if not status:
         return ""
     s = status.lower().strip()
@@ -101,10 +89,6 @@ def canonical_status(status):
     return mapping.get(s, "UNKNOWN")
 
 def standardize_numeric_filter(filter_str):
-    """
-    Convert natural language numeric criteria into a symbol-based format.
-    E.g., "less than 14" becomes "<14", "greater than or equal to 12" becomes ">=12".
-    """
     filter_str = filter_str.lower().strip()
     if "less than or equal to" in filter_str:
         match = re.search(r"less than or equal to\s*(\d+)", filter_str)
@@ -130,9 +114,9 @@ def standardize_numeric_filter(filter_str):
 
 def standardize_date_filter(filter_str):
     """
-    Convert natural language date criteria into a symbol-based ISO format.
-    For example, "before March 2015" becomes "<2015-03-01".
-    If the date is incomplete (e.g., "2011-12"), pad it to "2011-12-01".
+    Convert natural language date criteria into a symbol-based ISO string.
+    For example, "before March 2020" becomes "<2020-03-01".
+    If the date is provided in YYYY-MM format, pad with "-01".
     """
     filter_str = filter_str.lower().strip()
     months = {
@@ -152,12 +136,10 @@ def standardize_date_filter(filter_str):
             month_word, year = match.groups()
             month = months.get(month_word.lower(), "01")
             return ">" + f"{year}-{month}-01"
-    # If already in full ISO format (YYYY-MM-DD), use it.
     match = re.match(r"([<>]=?)(\d{4}-\d{2}-\d{2})$", filter_str)
     if match:
         op, date_val = match.groups()
         return op + date_val
-    # If in YYYY-MM format, pad it.
     match = re.match(r"([<>]=?)(\d{4}-\d{2})$", filter_str)
     if match:
         op, date_val = match.groups()
@@ -165,31 +147,15 @@ def standardize_date_filter(filter_str):
     return filter_str
 
 def parse_date_filter(filter_value):
-    """
-    Parse a date filter string in symbol format (e.g., '<2015-03-01') and return (operator, date string).
-    """
     match = re.match(r"([<>]=?)(\d{4}-\d{2}-\d{2})", filter_value)
     if match:
         op, date_val = match.groups()
         return op, date_val
     return None, None
 
-def convert_date_to_int(date_str):
-    """
-    Converts a date string in YYYY-MM-DD format to an integer in YYYYMMDD format.
-    For example, "2020-03-01" becomes 20200301.
-    """
-    try:
-        return int(date_str.replace("-", ""))
-    except Exception:
-        return None
-
+# In this version, since ChromaDB stores start dates as ISO strings, we do not convert them to integers.
+# We will use the ISO date string directly for filtering.
 def build_metadata_filter(parsed_input):
-    """
-    Constructs a ChromaDB-compatible metadata filter using `$and` for multiple conditions.
-    Now includes start_date. This version converts the start_date filter value into an integer
-    in YYYYMMDD format, since ChromaDB expects numeric values for comparison.
-    """
     filters = []
     if parsed_input.get("country"):
         country_val = canonical_country(parsed_input["country"])
@@ -211,10 +177,8 @@ def build_metadata_filter(parsed_input):
     if parsed_input.get("start_date"):
         op, date_val = parse_date_filter(parsed_input["start_date"])
         if op and date_val:
-            date_int = convert_date_to_int(date_val)
-            if date_int is not None:
-                op_map = {"<": "$lt", ">": "$gt", "<=": "$lte", ">=": "$gte"}
-                filters.append({"startDate": {op_map.get(op, op): date_int}})
+            op_map = {"<": "$lt", ">": "$gt", "<=": "$lte", ">=": "$gte"}
+            filters.append({"startDate": {op_map.get(op, op): date_val}})
     if len(filters) == 1:
         return filters[0]
     elif len(filters) > 1:
@@ -226,10 +190,6 @@ def build_metadata_filter(parsed_input):
 # ✅ OpenAI Structured Filter Extraction Function
 # -------------------------------
 def test_extract_filters(text):
-    """
-    Uses OpenAI's function calling to extract filter criteria from the provided text.
-    Returns a dict with keys: status, study_size, ages, gender, country, start_date.
-    """
     import openai
     openai.api_key = os.environ.get("OPENAI_API_KEY")
     functions = [
@@ -246,30 +206,12 @@ def test_extract_filters(text):
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "status": {
-                        "type": "string",
-                        "description": "The clinical trial status in standardized form (e.g., RECRUITING, WITHDRAWN, NOT_YET_RECRUITING, UNKNOWN, ACTIVE_NOT_RECRUITING, COMPLETED)."
-                    },
-                    "study_size": {
-                        "type": "string",
-                        "description": "The study size criteria in symbol-based format (e.g., '<14', '>=12')."
-                    },
-                    "ages": {
-                        "type": "string",
-                        "description": "The age criteria in symbol-based format (e.g., '<=65', '>18')."
-                    },
-                    "gender": {
-                        "type": "string",
-                        "description": "The gender criteria, e.g., 'male' or 'female'."
-                    },
-                    "country": {
-                        "type": "string",
-                        "description": "The country criteria, e.g., 'United States'."
-                    },
-                    "start_date": {
-                        "type": "string",
-                        "description": "The start date criteria in symbol-based date format (e.g., '<2015-03-01' means trials starting before March 1, 2015)."
-                    }
+                    "status": {"type": "string", "description": "The clinical trial status in standardized form."},
+                    "study_size": {"type": "string", "description": "The study size criteria in symbol-based format."},
+                    "ages": {"type": "string", "description": "The age criteria in symbol-based format."},
+                    "gender": {"type": "string", "description": "The gender criteria, e.g., 'male' or 'female'."},
+                    "country": {"type": "string", "description": "The country criteria, e.g., 'United States'."},
+                    "start_date": {"type": "string", "description": "The start date criteria in symbol-based date format (e.g., '<2015-03-01')."}
                 },
                 "required": ["status", "study_size", "ages", "gender", "country", "start_date"]
             }
@@ -301,36 +243,21 @@ def test_extract_filters(text):
 # ✅ Combined Extraction Function
 # -------------------------------
 def extract_criteria(input_text):
-    """
-    Splits the input text at the first comma:
-      - The text before the comma is sent to HF_CLIENT (Hermes‑FT‑synth) for biomarker extraction.
-      - The text after the comma is sent to OpenAI (using structured outputs) for filter extraction.
-    Post-processes filter values:
-      - For study_size and ages, converts natural language to symbol format.
-      - For start_date, converts natural language date expressions to a symbol-based ISO format 
-        (padding incomplete dates) and then converts that ISO date to an integer (YYYYMMDD).
-      - Canonicalizes status, country, and gender.
-    Returns a combined JSON object.
-    """
     if ',' in input_text:
         biomarker_text, filter_text = input_text.split(',', 1)
     else:
         biomarker_text = input_text
         filter_text = ""
     
-    # Get biomarker extraction output from HF_CLIENT.
     biomarker_data = get_model_response(biomarker_text)
     
-    # Extract filter criteria using OpenAI.
     if filter_text.strip():
         filter_data = test_extract_filters(filter_text.strip())
     else:
         filter_data = {"status": "", "study_size": "", "ages": "", "gender": "", "country": "", "start_date": ""}
     
-    # Post-process numeric and date filters.
     filter_data["study_size"] = standardize_numeric_filter(filter_data.get("study_size", ""))
     filter_data["ages"] = standardize_numeric_filter(filter_data.get("ages", ""))
-    # Standardize and then convert the start_date to ISO format; then convert to int YYYYMMDD.
     filter_data["start_date"] = standardize_date_filter(filter_data.get("start_date", ""))
     filter_data["status"] = canonical_status(filter_data.get("status", ""))
     filter_data["country"] = canonical_country(filter_data.get("country", ""))
@@ -346,14 +273,12 @@ def extract_criteria(input_text):
         "country": filter_data.get("country", ""),
         "start_date": filter_data.get("start_date", "")
     }
-    
     return combined
 
 # -------------------------------
 # ✅ Query ChromaDB Based on Combined JSON
 # -------------------------------
 def flatten_list(nested_list):
-    """Flattens a list of lists into a single list."""
     return [item for sublist in nested_list for item in (sublist if isinstance(sublist, list) else [sublist])]
 
 def query_chromadb(parsed_input):
@@ -448,6 +373,7 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
 
 
 
