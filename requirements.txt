@@ -1,3 +1,4 @@
+openai
 gradio_client
 streamlit
 gradio_client
@@ -6,4 +7,3 @@ sentence-transformers
 pandas
 numpy
 pysqlite3-binary
-plotly
