@@ -381,7 +381,7 @@ st.markdown("### 🩸 Enter Biomarker Criteria:")
 
 user_input = st.text_area(
     "Provide key biomarkers and eligibility criteria to find relevant trials below 👇", 
-    placeholder="e.g., 'BRAF, country is us and status terminated with study size less than 40 and start date before March 2020'"
+    placeholder="e.g., 'List lung cancer trials for KRAS mutation patients, female in the US that are active but not recruiting and have a study size greater than 35'"
 )
 
 if st.button("🔍 Extract Biomarkers & Find Trials"):
