@@ -45,7 +45,6 @@ embedding_model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
 # -------------------------------
 # ✅ Helper Functions for Filtering
 # -------------------------------
-
 def parse_filter_criteria(filter_value):
     """
     Parses filter criteria (>, >=, <, <=, !=, =) into ChromaDB-supported format.
@@ -89,7 +88,7 @@ def canonical_status(status):
         return ""
     s = status.lower().strip()
     mapping = {
-        "closed": "TERMINATED",    # you may choose to map closed to TERMINATED or COMPLETED as desired.
+        "closed": "TERMINATED",  # Adjust mapping as needed (e.g., closed → TERMINATED or COMPLETED)
         "finished": "TERMINATED",
         "done": "TERMINATED",
         "terminated": "TERMINATED",
@@ -98,7 +97,7 @@ def canonical_status(status):
         "open": "RECRUITING",
         "withdrawn": "WITHDRAWN",
         "not yet recruiting": "NOT_YET_RECRUITING",
-        "active": "ACTIVE_NOT_RECRUITING"  # depending on your logic
+        "active": "ACTIVE_NOT_RECRUITING"
     }
     return mapping.get(s, "UNKNOWN")
 
@@ -133,9 +132,8 @@ def standardize_numeric_filter(filter_str):
 
 def standardize_date_filter(filter_str):
     """
-    Convert natural language date criteria into a symbol-based date format.
-    For example, "before March 2015" should become "<2015-03-01".
-    This simple implementation looks for 'before' or 'after' and uses the first day of the month.
+    Convert natural language date criteria into a symbol-based ISO format.
+    For example, "before March 2015" becomes "<2015-03-01".
     """
     filter_str = filter_str.lower().strip()
     months = {
@@ -144,7 +142,6 @@ def standardize_date_filter(filter_str):
         "september": "09", "october": "10", "november": "11", "december": "12"
     }
     if "before" in filter_str:
-        # Extract a month and year; default day is 01.
         match = re.search(r"before\s+([a-zA-Z]+)\s*(\d{4})", filter_str)
         if match:
             month_word, year = match.groups()
@@ -156,7 +153,6 @@ def standardize_date_filter(filter_str):
             month_word, year = match.groups()
             month = months.get(month_word.lower(), "01")
             return ">" + f"{year}-{month}-01"
-    # If already in symbol-based ISO format, return as-is.
     match = re.match(r"([<>]=?)(\d{4}-\d{2}-\d{2})", filter_str)
     if match:
         op, date_val = match.groups()
@@ -172,6 +168,16 @@ def parse_date_filter(filter_value):
         op, date_val = match.groups()
         return op, date_val
     return None, None
+
+def convert_date_to_timestamp(date_str):
+    """
+    Converts a date string in YYYY-MM-DD format to an integer Unix timestamp.
+    """
+    try:
+        dt = datetime.strptime(date_str, "%Y-%m-%d")
+        return int(dt.timestamp())
+    except Exception as e:
+        return None
 
 def build_metadata_filter(parsed_input):
     """
@@ -199,8 +205,11 @@ def build_metadata_filter(parsed_input):
     if parsed_input.get("start_date"):
         op, date_val = parse_date_filter(parsed_input["start_date"])
         if op and date_val:
-            filters.append({"startDate": { {"<": "$lt", ">": "$gt", "<=": "$lte", ">=": "$gte"}.get(op, op): date_val }})
-            # The above line uses a mapping from symbol to MongoDB-like operator.
+            ts = convert_date_to_timestamp(date_val)
+            if ts is not None:
+                # Map operator to MongoDB-like operator.
+                op_map = {"<": "$lt", ">": "$gt", "<=": "$lte", ">=": "$gte"}
+                filters.append({"startDate": {op_map.get(op, op): ts}})
     if len(filters) == 1:
         return filters[0]
     elif len(filters) > 1:
@@ -262,7 +271,7 @@ def test_extract_filters(text):
         }
     ]
     response = openai.ChatCompletion.create(
-        model="gpt-4o-mini-2024-07-18",  # Adjust as needed
+        model="gpt-4o-mini-2024-07-18",  # Adjust model as needed
         messages=[
             {"role": "system", "content": "You are an assistant that extracts clinical trial filter criteria in standardized format."},
             {"role": "user", "content": f"Extract filter criteria from the following text:\n\n{text}"}
@@ -289,11 +298,11 @@ def test_extract_filters(text):
 def extract_criteria(input_text):
     """
     Splits the input text at the first comma:
-      - Text before the comma is sent to HF_CLIENT (Hermes‑FT‑synth) for biomarker extraction.
-      - Text after the comma is sent to OpenAI (using structured outputs) for filter extraction.
+      - The text before the comma is sent to HF_CLIENT (Hermes‑FT‑synth) for biomarker extraction.
+      - The text after the comma is sent to OpenAI (using structured outputs) for filter extraction.
     Post-processes filter values:
       - For study_size and ages, converts natural language to symbol format.
-      - For start_date, converts natural language date expressions to symbol-based ISO format.
+      - For start_date, converts natural language date expressions to symbol-based ISO format and then to a Unix timestamp.
       - Canonicalizes status, country, and gender.
     Returns a combined JSON object.
     """
@@ -333,7 +342,7 @@ def extract_criteria(input_text):
     return combined
 
 # -------------------------------
-# ✅ Query ChromaDB Based on Combined JSON (unchanged)
+# ✅ Query ChromaDB Based on Combined JSON
 # -------------------------------
 def flatten_list(nested_list):
     """Flattens a list of lists into a single list."""
@@ -364,7 +373,7 @@ def query_chromadb(parsed_input):
         return pd.DataFrame(columns=["nctId", "condition", "eligibility", "briefSummary", "overallStatus", "age", "count", "sex", "country", "startDate"])
 
 # -------------------------------
-# ✅ Format Results as Table (unchanged)
+# ✅ Format Results as Table
 # -------------------------------
 def format_results_as_table(df, extracted_data):
     table_data = []
@@ -431,6 +440,7 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
 
 
 
