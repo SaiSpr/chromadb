@@ -45,7 +45,6 @@ embedding_model = SentenceTransformer("all-MiniLM-L6-v2", device="cpu")
 # -------------------------------
 # ✅ Helper Functions for Filtering
 # -------------------------------
-
 def parse_filter_criteria(filter_value):
     """
     Parses filter criteria (>, >=, <, <=, !=, =) into ChromaDB-supported format.
@@ -80,8 +79,8 @@ def canonical_gender(gender):
 
 def canonical_status(status):
     """
-    Map synonyms for status into one of the standardized values.
-    Standard values: RECRUITING, WITHDRAWN, NOT_YET_RECRUITING, UNKNOWN, ACTIVE_NOT_RECRUITING, COMPLETED.
+    Map synonyms for status into one of the standardized values:
+    RECRUITING, WITHDRAWN, NOT_YET_RECRUITING, UNKNOWN, ACTIVE_NOT_RECRUITING, COMPLETED.
     (In this example, "closed"/"finished"/"done"/"terminated" are mapped to "TERMINATED".)
     """
     if not status:
@@ -133,7 +132,7 @@ def standardize_date_filter(filter_str):
     """
     Convert natural language date criteria into a symbol-based ISO format.
     For example, "before March 2015" becomes "<2015-03-01".
-    Also, if the result is incomplete (e.g., "<2011-12"), it will be padded to "<2011-12-01".
+    If the date is in YYYY-MM format (e.g., "2011-12"), pad it to "2011-12-01".
     """
     filter_str = filter_str.lower().strip()
     months = {
@@ -175,10 +174,21 @@ def parse_date_filter(filter_value):
         return op, date_val
     return None, None
 
+def convert_date_to_timestamp(date_str):
+    """
+    Converts a date string in YYYY-MM-DD format to an integer Unix timestamp.
+    """
+    try:
+        dt = datetime.strptime(date_str, "%Y-%m-%d")
+        return int(dt.timestamp())
+    except Exception:
+        return None
+
 def build_metadata_filter(parsed_input):
     """
     Constructs a ChromaDB-compatible metadata filter using `$and` for multiple conditions.
-    Now includes start_date (assumed to be stored as an ISO string, e.g., "YYYY-MM-DD").
+    Now includes start_date. This version converts the start_date filter value
+    into a numeric Unix timestamp.
     """
     filters = []
     if parsed_input.get("country"):
@@ -201,8 +211,10 @@ def build_metadata_filter(parsed_input):
     if parsed_input.get("start_date"):
         op, date_val = parse_date_filter(parsed_input["start_date"])
         if op and date_val:
-            op_map = {"<": "$lt", ">": "$gt", "<=": "$lte", ">=": "$gte"}
-            filters.append({"startDate": {op_map.get(op, op): date_val}})
+            ts = convert_date_to_timestamp(date_val)
+            if ts is not None:
+                op_map = {"<": "$lt", ">": "$gt", "<=": "$lte", ">=": "$gte"}
+                filters.append({"startDate": {op_map.get(op, op): ts}})
     if len(filters) == 1:
         return filters[0]
     elif len(filters) > 1:
@@ -295,8 +307,8 @@ def extract_criteria(input_text):
       - The text after the comma is sent to OpenAI (using structured outputs) for filter extraction.
     Post-processes filter values:
       - For study_size and ages, converts natural language to symbol format.
-      - For start_date, converts natural language date expressions to a symbol-based ISO format 
-        (and pads incomplete dates, e.g., "2011-12" → "2011-12-01").
+      - For start_date, converts natural language date expressions to a symbol-based ISO format (padded to full date)
+        and then converts that ISO date to a Unix timestamp.
       - Canonicalizes status, country, and gender.
     Returns a combined JSON object.
     """
