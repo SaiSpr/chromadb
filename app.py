@@ -153,8 +153,10 @@ def parse_date_filter(filter_value):
         return op, date_val
     return None, None
 
-# In this version, since ChromaDB stores start dates as ISO strings, we do not convert them to integers.
-# We will use the ISO date string directly for filtering.
+# -------------------------------
+# For now, do not apply the start_date filter to the query.
+# We'll include it in the combined JSON output for display,
+# but we won't add a condition for it in the query.
 def build_metadata_filter(parsed_input):
     filters = []
     if parsed_input.get("country"):
@@ -174,11 +176,12 @@ def build_metadata_filter(parsed_input):
     if parsed_input.get("status"):
         status_val = canonical_status(parsed_input["status"])
         filters.append({"overallStatus": {"$eq": status_val}})
-    if parsed_input.get("start_date"):
-        op, date_val = parse_date_filter(parsed_input["start_date"])
-        if op and date_val:
-            op_map = {"<": "$lt", ">": "$gt", "<=": "$lte", ">=": "$gte"}
-            filters.append({"startDate": {op_map.get(op, op): date_val}})
+    # NOTE: We are not applying the start_date filter to the query.
+    # if parsed_input.get("start_date"):
+    #     op, date_val = parse_date_filter(parsed_input["start_date"])
+    #     if op and date_val:
+    #         op_map = {"<": "$lt", ">": "$gt", "<=": "$lte", ">=": "$gte"}
+    #         filters.append({"startDate": {op_map.get(op, op): date_val}})
     if len(filters) == 1:
         return filters[0]
     elif len(filters) > 1:
@@ -218,7 +221,7 @@ def test_extract_filters(text):
         }
     ]
     response = openai.ChatCompletion.create(
-        model="gpt-4o-mini-2024-07-18",  # Adjust model as needed
+        model="gpt-4o-mini-2024-07-18",
         messages=[
             {"role": "system", "content": "You are an assistant that extracts clinical trial filter criteria in standardized format."},
             {"role": "user", "content": f"Extract filter criteria from the following text:\n\n{text}"}
@@ -271,12 +274,12 @@ def extract_criteria(input_text):
         "ages": filter_data.get("ages", ""),
         "gender": filter_data.get("gender", ""),
         "country": filter_data.get("country", ""),
-        "start_date": filter_data.get("start_date", "")
+        "start_date": filter_data.get("start_date", "")  # This is displayed but not used in query.
     }
     return combined
 
 # -------------------------------
-# ✅ Query ChromaDB Based on Combined JSON
+# ✅ Query ChromaDB Based on Combined JSON (excluding start_date filter)
 # -------------------------------
 def flatten_list(nested_list):
     return [item for sublist in nested_list for item in (sublist if isinstance(sublist, list) else [sublist])]
@@ -350,7 +353,7 @@ if st.button("🔍 Extract Biomarkers & Find Trials"):
         st.markdown("### 🧬 Extracted Biomarkers & Filters:")
         response = extract_criteria(user_input)
         if isinstance(response, dict):
-            st.json(response)  # Display combined JSON output
+            st.json(response)  # Display combined JSON output (includes start_date for display)
             st.markdown("### 🔍 Matched Clinical Trials:")
             trial_results = query_chromadb(response)
             if not trial_results.empty:
@@ -373,6 +376,7 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
+
 
 
 
