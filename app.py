@@ -71,14 +71,26 @@ def canonical_gender(gender):
     return gender.upper()
 
 def canonical_status(status):
+    """
+    Map synonyms for status into one of the standardized values.
+    Allowed values: RECRUITING, WITHDRAWN, NOT_YET_RECRUITING, UNKNOWN, ACTIVE_NOT_RECRUITING, COMPLETED.
+    
+    For example:
+      - If the input contains "closed", "finished", "done", or "terminated", output "COMPLETED".
+      - If the input contains "recruiting", "enrolling", or "open", output "RECRUITING".
+      - If the input contains "withdrawn", output "WITHDRAWN".
+      - If the input contains "not yet recruiting", output "NOT_YET_RECRUITING".
+      - If the input contains "active", output "ACTIVE_NOT_RECRUITING".
+      - Otherwise, output "UNKNOWN".
+    """
     if not status:
         return ""
     s = status.lower().strip()
     mapping = {
-        "closed": "TERMINATED",
-        "finished": "TERMINATED",
-        "done": "TERMINATED",
-        "terminated": "TERMINATED",
+        "closed": "COMPLETED",
+        "finished": "COMPLETED",
+        "done": "COMPLETED",
+        "terminated": "COMPLETED",
         "recruiting": "RECRUITING",
         "enrolling": "RECRUITING",
         "open": "RECRUITING",
@@ -116,7 +128,7 @@ def standardize_date_filter(filter_str):
     """
     Convert natural language date criteria into a symbol-based ISO string.
     For example, "before March 2020" becomes "<2020-03-01".
-    If the date is provided in YYYY-MM format, pad with "-01".
+    If the date is provided in YYYY-MM format, pad it with "-01".
     """
     filter_str = filter_str.lower().strip()
     months = {
@@ -154,9 +166,7 @@ def parse_date_filter(filter_value):
     return None, None
 
 # -------------------------------
-# For now, do not apply the start_date filter to the query.
-# We'll include it in the combined JSON output for display,
-# but we won't add a condition for it in the query.
+# Since ChromaDB stores startDate as ISO strings, we will not apply the start_date filter.
 def build_metadata_filter(parsed_input):
     filters = []
     if parsed_input.get("country"):
@@ -176,12 +186,7 @@ def build_metadata_filter(parsed_input):
     if parsed_input.get("status"):
         status_val = canonical_status(parsed_input["status"])
         filters.append({"overallStatus": {"$eq": status_val}})
-    # NOTE: We are not applying the start_date filter to the query.
-    # if parsed_input.get("start_date"):
-    #     op, date_val = parse_date_filter(parsed_input["start_date"])
-    #     if op and date_val:
-    #         op_map = {"<": "$lt", ">": "$gt", "<=": "$lte", ">=": "$gte"}
-    #         filters.append({"startDate": {op_map.get(op, op): date_val}})
+    # Do not apply the start_date filter.
     if len(filters) == 1:
         return filters[0]
     elif len(filters) > 1:
@@ -204,17 +209,48 @@ def test_extract_filters(text):
                 "- For 'study_size' and 'ages', return the criteria in symbol-based format (e.g., '<14', '>=12'). "
                 "- For 'start_date', return the criteria in symbol-based date format (e.g., '<2015-03-01' means trials starting before March 1, 2015). "
                 "- For 'status', the value must be one of: RECRUITING, WITHDRAWN, NOT_YET_RECRUITING, UNKNOWN, ACTIVE_NOT_RECRUITING, COMPLETED. "
+                "For example, if the input contains 'closed', 'finished', 'done', or 'terminated', return 'COMPLETED'. "
+                "If it contains 'recruiting', 'enrolling', or 'open', return 'RECRUITING'. "
+                "If it contains 'withdrawn', return 'WITHDRAWN'. "
+                "If it contains 'not yet recruiting', return 'NOT_YET_RECRUITING'. "
+                "If it contains 'active', return 'ACTIVE_NOT_RECRUITING'. "
+                "If none of these terms are found, return 'UNKNOWN'. "
                 "If a field is not mentioned, return an empty string."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
-                    "status": {"type": "string", "description": "The clinical trial status in standardized form."},
-                    "study_size": {"type": "string", "description": "The study size criteria in symbol-based format."},
-                    "ages": {"type": "string", "description": "The age criteria in symbol-based format."},
-                    "gender": {"type": "string", "description": "The gender criteria, e.g., 'male' or 'female'."},
-                    "country": {"type": "string", "description": "The country criteria, e.g., 'United States'."},
-                    "start_date": {"type": "string", "description": "The start date criteria in symbol-based date format (e.g., '<2015-03-01')."}
+                    "status": {
+                        "type": "string",
+                        "description": (
+                            "The clinical trial status in standardized form. "
+                            "Examples: 'closed', 'finished', 'done', or 'terminated' should yield 'COMPLETED'; "
+                            "'recruiting', 'enrolling', or 'open' should yield 'RECRUITING'; "
+                            "'withdrawn' should yield 'WITHDRAWN'; "
+                            "'not yet recruiting' should yield 'NOT_YET_RECRUITING'; "
+                            "'active' should yield 'ACTIVE_NOT_RECRUITING'."
+                        )
+                    },
+                    "study_size": {
+                        "type": "string",
+                        "description": "The study size criteria in symbol-based format (e.g., '<14', '>=12')."
+                    },
+                    "ages": {
+                        "type": "string",
+                        "description": "The age criteria in symbol-based format (e.g., '<=65', '>18')."
+                    },
+                    "gender": {
+                        "type": "string",
+                        "description": "The gender criteria, e.g., 'male' or 'female'."
+                    },
+                    "country": {
+                        "type": "string",
+                        "description": "The country criteria, e.g., 'United States'."
+                    },
+                    "start_date": {
+                        "type": "string",
+                        "description": "The start date criteria in symbol-based date format (e.g., '<2015-03-01' means trials starting before March 1, 2015)."
+                    }
                 },
                 "required": ["status", "study_size", "ages", "gender", "country", "start_date"]
             }
@@ -274,7 +310,7 @@ def extract_criteria(input_text):
         "ages": filter_data.get("ages", ""),
         "gender": filter_data.get("gender", ""),
         "country": filter_data.get("country", ""),
-        "start_date": filter_data.get("start_date", "")  # This is displayed but not used in query.
+        "start_date": filter_data.get("start_date", "")
     }
     return combined
 
